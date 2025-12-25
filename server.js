@@ -1070,7 +1070,15 @@ app.post('/api/collab', async (req, res) => {
 });
 
 // Get dataset statistics
-app.get('/api/stats', (req, res) => {
+const statsLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 60, // limit each IP to 60 stats requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many stats requests from this IP, please try again later.' }
+});
+
+app.get('/api/stats', statsLimiter, (req, res) => {
   try {
     const collabPath = path.join(DATA_DIR, 'collab.jsonl');
     if (!fs.existsSync(collabPath)) {
