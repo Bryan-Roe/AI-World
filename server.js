@@ -60,6 +60,8 @@ const SSE_RETRY_MS = Number(CFG?.sse?.retry_ms || 3000);
 const MORGAN_FORMAT = CFG?.logging?.morgan_format || 'dev';
 const JSON_LIMIT = `${CFG?.limits?.max_payload_mb || 10}mb`;
 const CHAT_MAX_HISTORY = Number(CFG?.chat?.max_history || 12);
+const UPSTREAM_TIMEOUT_MS = Number(process.env.UPSTREAM_TIMEOUT_MS || CFG?.server?.upstream_timeout_ms || 20000);
+const STREAM_TIMEOUT_MS = Number(process.env.STREAM_TIMEOUT_MS || CFG?.server?.stream_timeout_ms || 0);
 const TRAINING_RUNNER = path.join(process.cwd(), 'training_runner.py');
 const TRAINING_LOG_LIMIT = 1500;
 const TRAINING_MODULES = new Set([
@@ -108,6 +110,18 @@ const flushTrainingLog = (job) => {
   }
   job.buffer = '';
 };
+const fetchWithTimeout = async (url, options = {}, timeoutMs = UPSTREAM_TIMEOUT_MS) => {
+  if (!timeoutMs || timeoutMs <= 0) {
+    return fetch(url, options);
+  }
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
 if (CFG?.server?.trust_proxy === true) {
   app.set('trust proxy', 1);
 }
@@ -129,7 +143,7 @@ console.log(`Using OLLAMA_URL: ${OLLAMA_URL}`);
 if (process.env.NODE_ENV !== 'test') {
   (async () => {
   try {
-    const resp = await fetch(`${OLLAMA_URL}/api/tags`, { timeout: 3000 });
+    const resp = await fetchWithTimeout(`${OLLAMA_URL}/api/tags`, {}, 3000);
     if (resp.ok) {
       const data = await resp.json();
       const models = data.models?.map(m => m.name).join(', ') || 'none';
@@ -332,11 +346,11 @@ app.post('/api/agent-chat', async (req, res) => {
     ];
 
     // Reuse the main chat handler by calling it directly
-    const response = await fetch(`http://localhost:${PORT}/api/chat`, {
+    const response = await fetchWithTimeout(`http://localhost:${PORT}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ messages, model })
-    });
+    }, UPSTREAM_TIMEOUT_MS);
 
     const data = await response.json();
     if (!response.ok) {
@@ -380,7 +394,7 @@ app.post('/api/chat', async (req, res) => {
       const url = `${OLLAMA_URL}/api/chat`;
       let response;
       try {
-        response = await fetch(url, {
+        response = await fetchWithTimeout(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -388,7 +402,7 @@ app.post('/api/chat', async (req, res) => {
             messages: trimmedMessages,
             stream: false
           })
-        });
+        }, UPSTREAM_TIMEOUT_MS);
       } catch (err) {
         console.error('Ollama fetch failed', {
           url,
@@ -451,7 +465,7 @@ app.post('/api/chat', async (req, res) => {
       });
     }
     // Fallback: OpenAI Responses API
-    const response = await fetch('https://api.openai.com/v1/responses', {
+    const response = await fetchWithTimeout('https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -521,11 +535,11 @@ app.post('/api/chat-stream', async (req, res) => {
 
     if (!isCloudModel) {
       // Ollama streaming
-      const response = await fetch(`${OLLAMA_URL}/api/chat`, {
+      const response = await fetchWithTimeout(`${OLLAMA_URL}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ model: chosenModel, messages: trimmedMessages, stream: true })
-      });
+      }, STREAM_TIMEOUT_MS);
       if (!response.ok || !response.body) {
         const text = await response.text().catch(() => '');
         res.status(response.status || 500).end(text || 'Ollama error');
@@ -568,7 +582,7 @@ app.post('/api/chat-stream', async (req, res) => {
         guide: 'See OPENAI_API_KEY_SETUP.md for instructions'
       });
     }
-    const response = await fetch('https://api.openai.com/v1/responses', {
+    const response = await fetchWithTimeout('https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -840,7 +854,7 @@ app.post('/api/multi-chat', async (req, res) => {
         return queryOpenAI(model);
       }
       return queryOllama(model);
-    });
+    }, UPSTREAM_TIMEOUT_MS);
 
     const results = await Promise.all(tasks);
 
@@ -1139,7 +1153,7 @@ app.post('/api/training/start', (req, res) => {
     const child = spawn(pythonPath, args, {
       cwd: process.cwd(),
       env: { ...process.env, PYTHONUNBUFFERED: '1' }
-    });
+    }, STREAM_TIMEOUT_MS);
 
     const jobId = crypto.randomUUID();
     const job = {

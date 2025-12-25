@@ -233,7 +233,7 @@
     #status.error { color: #f87171; }
     
     #info-panel {
-      position: absolute;
+      position: fixed;
       bottom: 20px;
       left: 20px;
       background: var(--panel);
@@ -245,6 +245,7 @@
       backdrop-filter: blur(10px);
       min-width: 200px;
       box-shadow: 0 16px 40px rgba(0,0,0,0.35);
+      z-index: 200;
     }
 
     #close-info-btn {
@@ -256,10 +257,15 @@
       color: #9ca3af;
       font-size: 14px;
       cursor: pointer;
-      padding: 4px;
+      padding: 15px;
       line-height: 1;
       border-radius: 4px;
       transition: background 0.2s, color 0.2s;
+      min-width: 44px;
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
     #close-info-btn:hover {
@@ -333,17 +339,55 @@
       box-shadow: 0 12px 32px rgba(59, 130, 246, 0.5);
     }
 
+    /* Accessibility: focus styles */
+    button:focus-visible,
+    input:focus-visible,
+    select:focus-visible,
+    textarea:focus-visible {
+      outline: 2px solid #60a5fa;
+      outline-offset: 2px;
+      box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.35);
+    }
+
+    /* Accessibility: minimum touch targets */
+    button,
+    input[type="button"],
+    input[type="submit"],
+    input[type="reset"],
+    select {
+      min-height: 44px;
+    }
+
+    input[type="checkbox"],
+    input[type="radio"] {
+      min-width: 20px;
+      min-height: 20px;
+      cursor: pointer;
+    }
+
+    /* Respect reduced motion preferences */
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        animation: none !important;
+        transition: none !important;
+      }
+    }
+
     @media (max-width: 768px) {
       #llm-chat-panel {
-        bottom: 10px;
+        bottom: calc(10px + env(safe-area-inset-bottom, 0px));
         right: 10px;
         left: 10px;
         width: calc(100vw - 20px);
         padding: 15px;
       }
 
+      #llm-chat-panel #chat-messages {
+        height: 220px;
+      }
+
       #toggle-chat-btn {
-        bottom: 10px;
+        bottom: calc(10px + env(safe-area-inset-bottom, 0px));
         right: 10px;
         width: 48px;
         height: 48px;
@@ -351,7 +395,7 @@
       }
 
       #inventory-bar {
-        bottom: 60px;
+        bottom: calc(60px + env(safe-area-inset-bottom, 0px));
         gap: 2px;
         padding: 6px;
         max-width: calc(100vw - 20px);
@@ -359,8 +403,8 @@
       }
 
       .inventory-slot {
-        min-width: 40px;
-        min-height: 40px;
+        min-width: 44px;
+        min-height: 44px;
       }
 
       #minimap {
@@ -371,10 +415,15 @@
       }
 
       #info-panel {
-        bottom: 10px;
+        bottom: calc(10px + env(safe-area-inset-bottom, 0px));
         left: 10px;
         max-width: calc(100vw - 20px);
+        max-height: calc(50vh - 20px);
+        overflow: auto;
       }
+
+      #info-panel h3 { font-size: 13px; }
+      #info-panel p { font-size: 11px; }
     }
 
     #minimap {
@@ -573,13 +622,17 @@
       background: rgba(71, 85, 105, 0.5);
       border: 1px solid var(--border);
       color: var(--text);
-      padding: 6px 12px;
+      padding: 12px 16px;
       border-radius: 8px;
       font-size: 12px;
       cursor: pointer;
       margin-right: 6px;
       margin-bottom: 6px;
       transition: all 0.2s;
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
     }
     
     .preset-btn:hover {
@@ -1030,7 +1083,7 @@
             <button id="pause-companion-btn" style="flex: 1; padding: 10px; background: rgba(71, 85, 105, 0.6); border: 1px solid rgba(71, 85, 105, 0.8); border-radius: 6px; color: #e0e0e0; font-weight: 600; cursor: pointer;">⏸ Pause</button>
           </div>
           <div style="margin-top: 8px; display: flex; align-items: center; gap: 8px; font-size: 12px; color: #9ca3af;">
-            <input id="companion-voice-toggle" type="checkbox" checked style="width: 14px; height: 14px; accent-color: #60a5fa;">
+            <input id="companion-voice-toggle" type="checkbox" checked style="width: 20px; height: 20px; accent-color: #60a5fa; cursor: pointer;">
             <label for="companion-voice-toggle" style="cursor: pointer;">Enable voice responses</label>
           </div>
           <div id="companion-log" style="margin-top: 8px; min-height: 32px; font-size: 12px; color: #9ca3af; background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(71, 85, 105, 0.5); border-radius: 6px; padding: 8px;">
@@ -1107,17 +1160,17 @@
     </div>
 
     <!-- LLM Chat Panel -->
-    <div id="llm-chat-panel">
+    <div id="llm-chat-panel" role="dialog" aria-modal="true" aria-labelledby="chat-title">
       <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-        <h4 style="font-size: 16px; font-weight: 600; color: var(--accent);">🤖 AI Companion Chat</h4>
-        <button id="close-chat-btn" style="background: none; border: none; color: var(--muted); font-size: 20px; cursor: pointer; padding: 0; line-height: 1;">✕</button>
+        <h4 id="chat-title" style="font-size: 16px; font-weight: 600; color: var(--accent);">🤖 AI Companion Chat</h4>
+        <button id="close-chat-btn" aria-label="Close chat" style="background: none; border: none; color: var(--muted); font-size: 20px; cursor: pointer; padding: 0; line-height: 1;">✕</button>
       </div>
-      <div id="chat-messages" style="height: 300px; overflow-y: auto; margin-bottom: 12px; padding: 12px; background: rgba(5, 9, 16, 0.6); border-radius: 8px; border: 1px solid var(--border); font-size: 13px; line-height: 1.6;">
+      <div id="chat-messages" aria-live="polite" style="height: 300px; overflow-y: auto; margin-bottom: 12px; padding: 12px; background: rgba(5, 9, 16, 0.6); border-radius: 8px; border: 1px solid var(--border); font-size: 13px; line-height: 1.6;">
         <div style="color: var(--muted); text-align: center; padding: 20px;">Start a conversation with your AI companion...</div>
       </div>
       <div style="display: flex; gap: 8px;">
         <input id="chat-input" type="text" placeholder="Ask your companion anything..." style="flex: 1; padding: 12px; background: rgba(30,41,59,0.8); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 13px;" />
-        <button id="send-chat-btn" style="padding: 12px 20px; background: linear-gradient(135deg, var(--accent), #0ea5e9); border: none; border-radius: 8px; color: white; font-weight: 600; cursor: pointer; transition: all 0.2s;">Send</button>
+        <button id="send-chat-btn" aria-label="Send message" style="padding: 12px 20px; background: linear-gradient(135deg, var(--accent), #0ea5e9); border: none; border-radius: 8px; color: white; font-weight: 600; cursor: pointer; transition: all 0.2s;">Send</button>
       </div>
       <div style="margin-top: 8px; font-size: 11px; color: var(--muted);">
         Using: <span id="chat-model-name">distilgpt2 (fine-tuned)</span>
@@ -1125,10 +1178,18 @@
     </div>
 
     <!-- Chat Toggle Button -->
-    <button id="toggle-chat-btn">💬</button>
+    <button id="toggle-chat-btn" aria-label="Toggle chat">💬</button>
   </div>
 
   <script src="vendor/three.min.js?v=2"></script>
+  <script src="vendor/shaders_CopyShader.js?v=2"></script>
+  <script src="vendor/shaders_LuminosityHighPassShader.js?v=2"></script>
+  <script src="vendor/postprocessing_EffectComposer.js?v=2"></script>
+  <script src="vendor/postprocessing_ShaderPass.js?v=2"></script>
+  <script src="vendor/postprocessing_RenderPass.js?v=2"></script>
+  <script src="vendor/postprocessing_UnrealBloomPass.js?v=2"></script>
+  <script src="vendor/shaders_BokehShader.js?v=2"></script>
+  <script src="vendor/postprocessing_BokehPass.js?v=2"></script>
   <script src="vendor/PointerLockControls.js?v=2"></script>
   <script src="game.js?v=2"></script>
 </body>
