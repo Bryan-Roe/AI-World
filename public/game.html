@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI World Generator - 3D Interactive Game</title>
+  <script type="module" src="webllm-bridge.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      font-family: 'Segoe UI', system-ui, sans-serif; 
+      background: #0a0a0f; 
+      color: #e0e0e0;
+      overflow: hidden;
+    }
+    
+    #game-container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+    }
+    
+    #ui-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 100;
+    }
+    
+    #controls-panel {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      border-radius: 12px;
+      padding: 20px;
+      width: 320px;
+      pointer-events: auto;
+      backdrop-filter: blur(10px);
+      transition: transform 0.25s ease, width 0.2s ease, padding 0.2s ease;
+    }
+
+    #controls-panel.minimized {
+      transform: translateX(calc(-100% + 60px));
+      width: 320px;
+      padding: 16px 12px;
+    }
+
+    #controls-panel .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    #controls-panel h2 {
+      font-size: 18px;
+      color: #60a5fa;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0;
+    }
+    
+    #controls-panel h2::before {
+      content: '🌍';
+    }
+
+    #controls-panel .panel-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    #panel-toggle {
+      background: rgba(59, 130, 246, 0.15);
+      border: 1px solid rgba(59, 130, 246, 0.45);
+      color: #bfdbfe;
+      border-radius: 8px;
+      padding: 6px 10px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 12px;
+      transition: background 0.2s, border-color 0.2s, color 0.2s;
+    }
+
+    #controls-panel.minimized h2 {
+      opacity: 0;
+      width: 0;
+      overflow: hidden;
+    }
+
+    #controls-panel.minimized .panel-actions {
+      justify-content: flex-end;
+      width: 100%;
+    }
+
+    #controls-panel.minimized #panel-toggle {
+      position: absolute;
+      right: -6px;
+      top: 12px;
+      border-radius: 0 10px 10px 0;
+      padding: 8px 10px;
+      box-shadow: 0 6px 16px rgba(0,0,0,0.25);
+    }
+
+    #panel-toggle:hover {
+      background: rgba(59, 130, 246, 0.25);
+      border-color: rgba(59, 130, 246, 0.65);
+      color: #e5edff;
+    }
+
+    #controls-panel .panel-body {
+      display: block;
+    }
+
+    #controls-panel.minimized .panel-body {
+      display: none;
+    }
+    
+    .input-group {
+      margin-bottom: 15px;
+    }
+    
+    .input-group label {
+      display: block;
+      font-size: 12px;
+      color: #9ca3af;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    #prompt-input {
+      width: 100%;
+      padding: 12px;
+      background: rgba(30, 41, 59, 0.8);
+      border: 1px solid rgba(71, 85, 105, 0.5);
+      border-radius: 8px;
+      color: #e0e0e0;
+      font-size: 14px;
+      resize: vertical;
+      min-height: 80px;
+    }
+    
+    #prompt-input:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+    }
+    
+    #generate-btn {
+      width: 100%;
+      padding: 12px 20px;
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      border: none;
+      border-radius: 8px;
+      color: white;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    
+    #generate-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 20px rgba(59, 130, 246, 0.4);
+    }
+    
+    #generate-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+    
+    #status {
+      margin-top: 12px;
+      padding: 10px;
+      background: rgba(30, 41, 59, 0.6);
+      border-radius: 6px;
+      font-size: 12px;
+      color: #9ca3af;
+      min-height: 40px;
+    }
+    
+    #status.loading {
+      color: #fbbf24;
+    }
+    
+    #status.success {
+      color: #34d399;
+    }
+    
+    #status.error {
+      color: #f87171;
+    }
+    
+    #info-panel {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      border-radius: 10px;
+      padding: 15px;
+      pointer-events: auto;
+      backdrop-filter: blur(10px);
+      min-width: 200px;
+    }
+
+    #close-info-btn {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      background: transparent;
+      border: none;
+      color: #9ca3af;
+      font-size: 14px;
+      cursor: pointer;
+      padding: 4px;
+      line-height: 1;
+      border-radius: 4px;
+      transition: background 0.2s, color 0.2s;
+    }
+
+    #close-info-btn:hover {
+      background: rgba(255,255,255,0.08);
+      color: #e5e7eb;
+    }
+    
+    #info-panel h3 {
+      font-size: 14px;
+      color: #60a5fa;
+      margin-bottom: 10px;
+    }
+    
+    #info-panel p {
+      font-size: 12px;
+      color: #9ca3af;
+      line-height: 1.6;
+    }
+    
+    kbd {
+      background: rgba(71, 85, 105, 0.5);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 11px;
+    }
+    
+    #minimap {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      width: 150px;
+      height: 150px;
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      border-radius: 10px;
+      pointer-events: auto;
+      overflow: hidden;
+    }
+    
+    #minimap canvas {
+      width: 100%;
+      height: 100%;
+    }
+    
+    #crosshair {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 20px;
+      height: 20px;
+      pointer-events: none;
+    }
+    
+    #crosshair::before,
+    #crosshair::after {
+      content: '';
+      position: absolute;
+      background: rgba(255, 255, 255, 0.5);
+    }
+    
+    #crosshair::before {
+      width: 2px;
+      height: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+    
+    #crosshair::after {
+      width: 100%;
+      height: 2px;
+      top: 50%;
+      transform: translateY(-50%);
+    }
+
+    #player-ui {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      min-width: 200px;
+      background: rgba(10, 12, 18, 0.75);
+      border: 1px solid rgba(96, 165, 250, 0.35);
+      border-radius: 10px;
+      padding: 12px;
+      pointer-events: none;
+      font-size: 12px;
+      line-height: 1.6;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+    }
+
+    #resident-status {
+      position: absolute;
+      bottom: 20px;
+      left: 350px;
+      min-width: 200px;
+      background: rgba(15, 23, 42, 0.88);
+      border: 1px solid rgba(74, 222, 128, 0.35);
+      border-radius: 10px;
+      padding: 12px;
+      color: #d1fae5;
+      font-size: 12px;
+      line-height: 1.5;
+      pointer-events: none;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.35);
+    }
+
+    #resident-status h4 {
+      margin: 0 0 6px 0;
+      font-size: 13px;
+      color: #86efac;
+      letter-spacing: 0.3px;
+      text-transform: uppercase;
+    }
+    #player-ui h4 {
+      margin: 0 0 6px 0;
+      font-size: 13px;
+      color: #93c5fd;
+      letter-spacing: 0.3px;
+      text-transform: uppercase;
+    }
+
+    #player-ui .stat-row {
+      display: flex;
+      justify-content: space-between;
+      color: #d1d5db;
+    }
+
+    #player-ui .stat-row span.label {
+      color: #9ca3af;
+    }
+
+    #inventory-bar {
+      position: absolute;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 4px;
+      pointer-events: none;
+      padding: 8px;
+      background: rgba(10, 12, 18, 0.85);
+      border: 1px solid rgba(96, 165, 250, 0.4);
+      border-radius: 8px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+
+    .inventory-slot {
+      width: 48px;
+      height: 48px;
+      background: rgba(30, 41, 59, 0.8);
+      border: 2px solid rgba(71, 85, 105, 0.6);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      transition: all 0.2s;
+    }
+
+    .inventory-slot.selected {
+      border-color: #60a5fa;
+      background: rgba(59, 130, 246, 0.2);
+      box-shadow: 0 0 12px rgba(59, 130, 246, 0.5);
+    }
+
+    .slot-number {
+      position: absolute;
+      top: 2px;
+      left: 4px;
+      font-size: 10px;
+      color: #9ca3af;
+      font-weight: 600;
+    }
+
+    .item-icon {
+      font-size: 24px;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+    }
+    
+    .preset-btn {
+      background: rgba(71, 85, 105, 0.5);
+      border: 1px solid rgba(71, 85, 105, 0.5);
+      color: #e0e0e0;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      margin-right: 6px;
+      margin-bottom: 6px;
+      transition: all 0.2s;
+    }
+    
+    .preset-btn:hover {
+      background: rgba(59, 130, 246, 0.3);
+      border-color: #3b82f6;
+    }
+    
+    #presets {
+      display: flex;
+      flex-wrap: wrap;
+      margin-bottom: 15px;
+    }
+    
+    #model-select {
+      width: 100%;
+      padding: 10px;
+      background: rgba(30, 41, 59, 0.8);
+      border: 1px solid rgba(71, 85, 105, 0.5);
+      border-radius: 8px;
+      color: #e0e0e0;
+      font-size: 13px;
+    }
+
+    .loading-spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-radius: 50%;
+      border-top-color: #fff;
+      animation: spin 1s linear infinite;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container"></div>
+  
+  <div id="ui-overlay">
+    <div id="controls-panel">
+      <div class="panel-header">
+        <h2>AI World Generator</h2>
+        <div class="panel-actions">
+          <button id="panel-toggle" aria-expanded="true" aria-label="Minimize controls">➖ Minimize</button>
+        </div>
+      </div>
+      <div class="panel-body">
+      
+      <div class="input-group">
+        <label>AI Model</label>
+        <select id="model-select">
+          <option value="gpt-oss-20">gpt-oss-20 (local)</option>
+          <option value="llama3.2">llama3.2 (local)</option>
+          <option value="qwen2.5">qwen2.5 (local)</option>
+          <option value="gpt-4o-mini">gpt-4o-mini (cloud)</option>
+          <option value="web-llm:Llama-3.2-1B-Instruct-q4f16_1-MLC">Llama 3.2 1B (browser)</option>
+          <option value="web-llm:Phi-3-mini-4k-instruct-q4f16_1-MLC">Phi-3 Mini 4K (browser)</option>
+        </select>
+      </div>
+      
+      <div class="input-group">
+        <label>Quick Presets</label>
+        <div id="presets">
+          <button class="preset-btn" data-preset="forest">🌲 Forest</button>
+          <button class="preset-btn" data-preset="desert">🏜️ Desert</button>
+          <button class="preset-btn" data-preset="snow">❄️ Snow</button>
+          <button class="preset-btn" data-preset="alien">👽 Alien</button>
+          <button class="preset-btn" data-preset="underwater">🌊 Ocean</button>
+          <button class="preset-btn" data-preset="city">🏙️ City</button>
+        </div>
+      </div>
+      
+      <div class="input-group">
+        <label>Describe your world</label>
+        <textarea id="prompt-input" placeholder="A mystical forest with glowing mushrooms and ancient stone ruins..."></textarea>
+      </div>
+      
+      <button id="generate-btn">✨ Generate World</button>
+
+      <button id="reconnect-btn" style="margin-top: 10px; width: 100%; padding: 10px; background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.5); border-radius: 8px; color: #bfdbfe; font-weight: 600; cursor: pointer;">🔄 Reconnect Renderer</button>
+      
+      <div id="status">Ready to generate your world...</div>
+      
+        <div class="input-group" style="margin-top: 15px;">
+          <label>World Memory</label>
+          <div style="display: flex; gap: 8px;">
+            <button id="save-world-btn" style="flex: 1; padding: 8px; background: rgba(34, 197, 94, 0.2); border: 1px solid #22c55e; border-radius: 6px; color: #22c55e; font-size: 12px; cursor: pointer;">
+              💾 Save
+            </button>
+            <button id="clear-memory-btn" style="flex: 1; padding: 8px; background: rgba(239, 68, 68, 0.2); border: 1px solid #ef4444; border-radius: 6px; color: #ef4444; font-size: 12px; cursor: pointer;">
+              🗑️ Clear
+            </button>
+          </div>
+        </div>
+
+        <div class="input-group" style="margin-top: 12px;">
+          <label>Add Object (F)</label>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+            <select id="object-type" style="padding: 8px; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(71, 85, 105, 0.5); border-radius: 6px; color: #e0e0e0;">
+              <option value="cube">Cube</option>
+              <option value="sphere">Sphere</option>
+              <option value="crystal">Crystal</option>
+              <option value="mushroom">Mushroom</option>
+              <option value="tree">Tree</option>
+              <option value="rock">Rock</option>
+              <option value="light">Light</option>
+            </select>
+            <input id="object-color" type="color" value="#ff8844" style="padding: 6px; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(71, 85, 105, 0.5); border-radius: 6px;">
+          </div>
+          <div style="margin-top: 8px; display: flex; align-items: center; gap: 8px;">
+            <input id="object-size" type="range" min="2" max="20" value="6" style="flex: 1;">
+            <span style="font-size: 12px; color: #9ca3af;">Size</span>
+          </div>
+          <button id="add-object-btn" style="margin-top: 8px; width: 100%; padding: 10px; background: linear-gradient(135deg, #22c55e, #10b981); border: none; border-radius: 6px; color: white; font-weight: 600; cursor: pointer;">➕ Add Object at Crosshair</button>
+        </div>
+
+        <div class="input-group" style="margin-top: 12px;">
+          <label>Ask LLM to add objects</label>
+          <textarea id="llm-object-input" placeholder="e.g., add 5 blue crystals around me and a campfire with lights" style="width: 100%; padding: 10px; background: rgba(30,41,59,0.8); border: 1px solid rgba(71,85,105,0.5); border-radius: 8px; color: #e0e0e0; min-height: 70px;"></textarea>
+          <button id="llm-object-btn" style="margin-top: 8px; width: 100%; padding: 10px; background: linear-gradient(135deg, #f59e0b, #f97316); border: none; border-radius: 6px; color: white; font-weight: 600; cursor: pointer;">🤖 Ask LLM to Build</button>
+          <div id="llm-object-log" style="margin-top: 8px; font-size: 12px; color: #9ca3af; background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(71, 85, 105, 0.5); border-radius: 6px; padding: 8px; min-height: 32px;">Idle</div>
+        </div>
+
+        <div class="input-group" style="margin-top: 12px;">
+          <label>AI Companion</label>
+          <select id="companion-model" style="width: 100%; padding: 10px; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(71, 85, 105, 0.5); border-radius: 8px; color: #e0e0e0; font-size: 13px; margin-bottom: 8px;">
+                      <select id="companion-personality" style="width: 100%; padding: 10px; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(71, 85, 105, 0.5); border-radius: 8px; color: #e0e0e0; font-size: 13px; margin-bottom: 8px;">
+                        <option value="friendly">😊 Friendly</option>
+                        <option value="curious">🤔 Curious</option>
+                        <option value="protective">🛡️ Protective</option>
+                      </select>
+            <option value="gpt-oss-20">gpt-oss-20 (local)</option>
+            <option value="llama3.2">llama3.2 (local)</option>
+            <option value="qwen2.5">qwen2.5 (local)</option>
+            <option value="gpt-4o-mini">gpt-4o-mini (cloud)</option>
+          </select>
+          <div style="display: flex; gap: 8px;">
+            <button id="spawn-companion-btn" style="flex: 1; padding: 10px; background: linear-gradient(135deg, #3b82f6, #8b5cf6); border: none; border-radius: 6px; color: white; font-weight: 600; cursor: pointer;">🤖 Spawn</button>
+            <button id="pause-companion-btn" style="flex: 1; padding: 10px; background: rgba(71, 85, 105, 0.6); border: 1px solid rgba(71, 85, 105, 0.8); border-radius: 6px; color: #e0e0e0; font-weight: 600; cursor: pointer;">⏸ Pause</button>
+          </div>
+          <div id="companion-log" style="margin-top: 8px; min-height: 32px; font-size: 12px; color: #9ca3af; background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(71, 85, 105, 0.5); border-radius: 6px; padding: 8px;">
+            Companion idle.
+
+                  <div class="input-group" style="margin-top: 12px;">
+                    <label>🌤️ World Settings</label>
+                    <select id="weather-select" style="width: 100%; padding: 10px; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(71, 85, 105, 0.5); border-radius: 8px; color: #e0e0e0; font-size: 13px; margin-bottom: 8px;">
+                      <option value="clear">☀️ Clear</option>
+                      <option value="rain">🌧️ Rain</option>
+                      <option value="snow">❄️ Snow</option>
+                      <option value="mist">🌫️ Mist</option>
+                    </select>
+                    <div style="display: flex; align-items: center; gap: 8px; margin-top: 8px;">
+                      <label style="margin: 0; font-size: 11px;">Time Speed:</label>
+                      <input id="time-speed" type="range" min="0" max="0.0002" step="0.00001" value="0.00005" style="flex: 1;">
+                      <span style="font-size: 11px; color: #9ca3af;">⏱️</span>
+                    </div>
+                    <div style="margin-top: 10px;">
+                      <label style="font-size: 12px; font-weight: 600;">🏞️ Biome</label>
+                      <select id="biome-select" style="width: 100%; padding: 8px; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(71, 85, 105, 0.5); border-radius: 8px; color: #e0e0e0; font-size: 12px; margin-top: 6px;">
+                        <option value="forest">🌲 Forest</option>
+                        <option value="village">🏘️ Village</option>
+                        <option value="plains">🌾 Plains</option>
+                        <option value="desert">🏜️ Desert</option>
+                        <option value="mystic">✨ Mystical</option>
+                      </select>
+                    </div>
+                  </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div id="info-panel">
+      <button id="close-info-btn" aria-label="Close controls">✕</button>
+      <h3>🎮 Controls</h3>
+      <p>
+        <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move<br>
+        <kbd>Space</kbd> Jump &nbsp; <kbd>Shift</kbd> Run<br>
+        <kbd>Mouse</kbd> Look around<br>
+        <kbd>Click</kbd> to enable controls<br>
+        <kbd>E</kbd> Pickup &nbsp; <kbd>Q</kbd> Drop<br>
+        <kbd>1-9</kbd> Select slot &nbsp; <kbd>F</kbd> Add object<br>
+        🆕 <kbd>Shift+Click</kbd> Set companion waypoint<br>
+        LLM build: sidebar prompt
+      </p>
+      <h3 style="margin-top: 15px;">❓ If companion shows "Ollama offline"</h3>
+      <p style="font-size: 11px;">
+        <strong>Solution:</strong><br>
+        1. Open new terminal<br>
+        2. Run: <code style="background: rgba(71,85,105,0.5); padding: 2px 4px; border-radius: 3px;">ollama serve</code><br>
+        3. In another terminal: <code style="background: rgba(71,85,105,0.5); padding: 2px 4px; border-radius: 3px;">ollama pull gpt-oss-20</code><br>
+        4. Refresh this page<br>
+        5. Spawn companion again
+      </p>
+    </div>
+    
+    <div id="crosshair"></div>
+    <div id="inventory-bar"></div>
+    <div id="player-ui">
+      <h4>Player</h4>
+      <div class="stat-row"><span class="label">Pos</span><span id="ui-pos">0,0,0</span></div>
+      <div class="stat-row"><span class="label">Speed</span><span id="ui-speed">0</span></div>
+      <div class="stat-row"><span class="label">Session</span><span id="ui-session">0</span></div>
+      <div class="stat-row"><span class="label">Playtime</span><span id="ui-playtime">0m</span></div>
+    </div>
+
+    <div id="resident-status">
+      <h4>AI Resident</h4>
+      <div id="resident-line">Spawning...</div>
+      <div id="resident-mood" style="opacity:0.85;">Mood: curious</div>
+    </div>
+  </div>
+
+  <script src="/vendor/three.min.js?v=2"></script>
+  <script src="/vendor/PointerLockControls.js?v=2"></script>
+  <script src="game.js?v=2"></script>
+</body>
+</html>
