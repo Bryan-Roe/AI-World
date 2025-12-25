@@ -4502,12 +4502,6 @@ window.addEventListener('load', () => {
     console.log('✓ LLM Chat ready');
   }, 1000);
 });
-      statusEl.textContent = 'Initialization failed: ' + err.message;
-      statusEl.className = 'error';
-    }
-  }
-});
-
 // Save on page unload
 window.addEventListener('beforeunload', () => {
   if (window.game) {
