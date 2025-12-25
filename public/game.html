@@ -49,19 +49,33 @@
     }
     
     #controls-panel {
-      position: absolute;
+      position: fixed;
       top: 20px;
       left: 20px;
       background: linear-gradient(145deg, var(--panel), var(--panel-2));
       border: 1px solid var(--border);
       border-radius: 14px;
       padding: 20px;
-      width: 340px;
+      width: min(340px, calc(100vw - 40px));
+      max-height: calc(100vh - 40px);
+      overflow-y: auto;
+      overflow-x: hidden;
       pointer-events: auto;
       -webkit-backdrop-filter: blur(12px);
       backdrop-filter: blur(12px);
       box-shadow: 0 25px 70px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.02);
       transition: transform 0.25s ease, width 0.2s ease, padding 0.2s ease;
+      z-index: 200;
+    }
+
+    @media (max-width: 768px) {
+      #controls-panel {
+        top: 10px;
+        left: 10px;
+        width: calc(100vw - 20px);
+        max-height: calc(100vh - 100px);
+        padding: 16px;
+      }
     }
 
     #controls-panel.minimized {
@@ -273,6 +287,96 @@
       font-size: 11px;
     }
     
+    /* LLM Chat Panel */
+    #llm-chat-panel {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: min(400px, calc(100vw - 40px));
+      background: linear-gradient(145deg, var(--panel), var(--panel-2));
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px;
+      pointer-events: auto;
+      -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(12px);
+      box-shadow: 0 25px 70px rgba(0,0,0,0.35);
+      display: none;
+      z-index: 220;
+      transition: all 0.3s ease;
+    }
+
+    #toggle-chat-btn {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 56px;
+      height: 56px;
+      padding: 0;
+      background: linear-gradient(135deg, var(--accent), #0ea5e9);
+      border: none;
+      border-radius: 50%;
+      color: white;
+      font-size: 24px;
+      cursor: pointer;
+      pointer-events: auto;
+      box-shadow: 0 8px 24px rgba(59, 130, 246, 0.4);
+      transition: all 0.2s;
+      z-index: 210;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #toggle-chat-btn:hover {
+      transform: translateY(-2px) scale(1.05);
+      box-shadow: 0 12px 32px rgba(59, 130, 246, 0.5);
+    }
+
+    @media (max-width: 768px) {
+      #llm-chat-panel {
+        bottom: 10px;
+        right: 10px;
+        left: 10px;
+        width: calc(100vw - 20px);
+        padding: 15px;
+      }
+
+      #toggle-chat-btn {
+        bottom: 10px;
+        right: 10px;
+        width: 48px;
+        height: 48px;
+        font-size: 20px;
+      }
+
+      #inventory-bar {
+        bottom: 60px;
+        gap: 2px;
+        padding: 6px;
+        max-width: calc(100vw - 20px);
+        overflow-x: auto;
+      }
+
+      .inventory-slot {
+        min-width: 40px;
+        min-height: 40px;
+      }
+
+      #minimap {
+        width: 100px;
+        height: 100px;
+        top: 10px;
+        right: 10px;
+      }
+
+      #info-panel {
+        bottom: 10px;
+        left: 10px;
+        max-width: calc(100vw - 20px);
+      }
+    }
+
     #minimap {
       position: absolute;
       top: 20px;
@@ -293,13 +397,14 @@
     }
     
     #crosshair {
-      position: absolute;
+      position: fixed;
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
       width: 20px;
       height: 20px;
       pointer-events: none;
+      z-index: 90;
     }
     
     #crosshair::before,
@@ -324,10 +429,11 @@
     }
 
     #player-ui {
-      position: absolute;
+      position: fixed;
       bottom: 20px;
       right: 20px;
       min-width: 200px;
+      max-width: calc(100vw - 40px);
       background: var(--panel-2);
       border: 1px solid var(--border);
       border-radius: 10px;
@@ -336,13 +442,24 @@
       font-size: 12px;
       line-height: 1.6;
       box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+      z-index: 180;
+    }
+
+    @media (max-width: 768px) {
+      #player-ui {
+        bottom: 80px;
+        right: 10px;
+        font-size: 11px;
+        min-width: 150px;
+      }
     }
 
     #resident-status {
-      position: absolute;
+      position: fixed;
       bottom: 20px;
-      left: 350px;
+      left: 370px;
       min-width: 200px;
+      max-width: calc(100vw - 400px);
       background: var(--panel);
       border: 1px solid rgba(74, 222, 128, 0.35);
       border-radius: 10px;
@@ -352,6 +469,24 @@
       line-height: 1.5;
       pointer-events: none;
       box-shadow: 0 10px 25px rgba(0,0,0,0.35);
+      z-index: 180;
+    }
+
+    @media (max-width: 1024px) {
+      #resident-status {
+        left: 20px;
+        bottom: 100px;
+        max-width: calc(100vw - 40px);
+      }
+    }
+
+    @media (max-width: 768px) {
+      #resident-status {
+        bottom: 160px;
+        left: 10px;
+        font-size: 11px;
+        min-width: 150px;
+      }
     }
 
     #resident-status h4 {
@@ -380,7 +515,7 @@
     }
 
     #inventory-bar {
-      position: absolute;
+      position: fixed;
       bottom: 80px;
       left: 50%;
       transform: translateX(-50%);
@@ -392,6 +527,8 @@
       border: 1px solid var(--border);
       border-radius: 10px;
       box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      z-index: 160;
+      transition: all 0.3s ease;
     }
 
     .inventory-slot {
@@ -970,7 +1107,7 @@
     </div>
 
     <!-- LLM Chat Panel -->
-    <div id="llm-chat-panel" style="position: absolute; bottom: 20px; right: 20px; width: 400px; background: linear-gradient(145deg, var(--panel), var(--panel-2)); border: 1px solid var(--border); border-radius: 14px; padding: 20px; pointer-events: auto; backdrop-filter: blur(12px); box-shadow: 0 25px 70px rgba(0,0,0,0.35); display: none;">
+    <div id="llm-chat-panel">
       <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
         <h4 style="font-size: 16px; font-weight: 600; color: var(--accent);">🤖 AI Companion Chat</h4>
         <button id="close-chat-btn" style="background: none; border: none; color: var(--muted); font-size: 20px; cursor: pointer; padding: 0; line-height: 1;">✕</button>
@@ -988,7 +1125,7 @@
     </div>
 
     <!-- Chat Toggle Button -->
-    <button id="toggle-chat-btn" style="position: absolute; bottom: 20px; right: 20px; width: 56px; height: 56px; background: linear-gradient(135deg, var(--accent), #0ea5e9); border: none; border-radius: 50%; color: white; font-size: 24px; cursor: pointer; pointer-events: auto; box-shadow: 0 4px 12px rgba(34, 211, 238, 0.3); transition: all 0.2s; z-index: 150;">💬</button>
+    <button id="toggle-chat-btn">💬</button>
   </div>
 
   <script src="vendor/three.min.js?v=2"></script>

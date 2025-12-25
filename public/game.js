@@ -111,6 +111,9 @@ class WorldGenerator {
     this._blackColor = new THREE.Color(0x000000);
     this._sunColor = new THREE.Color(0xffffff);
     this._ambientColor = new THREE.Color(0xb5d4ff);
+    this.postFX = null;
+    this.postFXEnabled = true;
+    this.focusDistance = 45;
     
     this.init();
     this.setupEventListeners();
