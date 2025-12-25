@@ -13,7 +13,10 @@
 	},
 
 	// Expose common app ports from the container
-	"forwardPorts": [3000, 11434]
+	"forwardPorts": [3000, 11434],
+
+	// Run npm install after the container is created
+	"postCreateCommand": "npm install"
 
 	// Features to add to the dev container. More info: https://containers.dev/features.
 	// "features": {},
