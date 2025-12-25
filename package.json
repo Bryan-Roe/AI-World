@@ -11,7 +11,7 @@
         "test": "node --test tests/*.test.js",
         "check:js": "node --check server.js && node --check public/app.js && node --check public/game.js",
         "smoke:server": "node -e \"fetch('http://localhost:3000/health').then(r=>r.ok?r.json():Promise.reject(new Error('HTTP '+r.status))).then(j=>{console.log('OK /health', j);}).catch(e=>{console.error('FAIL /health', e.message);process.exit(1);})\"",
-        "smoke:ollama": "node -e \"fetch('http://localhost:11434/api/tags').then(r=>r.ok?r.json():Promise.reject(new Error('HTTP '+r.status))).then(j=>{console.log('OK ollama /api/tags');console.log('models', (j.models||[]).slice(0,5).map(m=>m.name).join(', '));}).catch(e=>{console.error('FAIL /hero', e.message);process.exit(1);})\"",
+        "smoke:ollama": "node -e \"fetch('http://localhost:11434/api/tags').then(r=>r.ok?r.json():Promise.reject(new Error('HTTP '+r.status))).then(j=>{console.log('OK ollama /api/tags');console.log('models', (j.models||[]).slice(0,5).map(m=>m.name).join(', '));}).catch(e=>{console.error('FAIL ollama /api/tags', e.message);process.exit(1);})\"",
         "smoke": "npm run check:js && npm run smoke:server && npm run smoke:ollama"
     },
     "keywords": [
