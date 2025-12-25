@@ -676,11 +676,11 @@ app.get('/api/chat-sse', async (req, res) => {
 
     if (!isCloudModel) {
       // Ollama SSE (adapt JSON lines to SSE)
-      const response = await fetch(`${OLLAMA_URL}/api/chat`, {
+      const response = await fetchWithTimeout(`${OLLAMA_URL}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ model: chosenModel, messages, stream: true })
-      });
+      }, STREAM_TIMEOUT_MS);
       if (!response.ok || !response.body) {
         const text = await response.text().catch(() => '');
         res.write(`event: error\n`);
@@ -724,7 +724,7 @@ app.get('/api/chat-sse', async (req, res) => {
       return;
     }
 
-    const response = await fetch('https://api.openai.com/v1/responses', {
+    const response = await fetchWithTimeout('https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -794,11 +794,11 @@ app.post('/api/multi-chat', async (req, res) => {
 
     const queryOllama = async (model) => {
       const t0 = Date.now();
-      const resp = await fetch(`${OLLAMA_URL}/api/chat`, {
+      const resp = await fetchWithTimeout(`${OLLAMA_URL}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ model, messages, stream: false })
-      });
+      }, UPSTREAM_TIMEOUT_MS);
       const t1 = Date.now();
       const rawText = await resp.text();
       let data;
@@ -809,7 +809,7 @@ app.post('/api/multi-chat', async (req, res) => {
 
     const queryOpenAI = async (model) => {
       const t0 = Date.now();
-      const resp = await fetch('https://api.openai.com/v1/responses', {
+      const resp = await fetchWithTimeout('https://api.openai.com/v1/responses', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -931,7 +931,7 @@ ${valid.map((r, i) => `Response ${i + 1} (${r.model}):\n${r.text}\n`).join('\n')
 Respond with ONLY the number of the best response (1-${valid.length}), nothing else.`;
 
       try {
-        const judgeResp = await fetch(`${OLLAMA_URL}/api/chat`, {
+        const judgeResp = await fetchWithTimeout(`${OLLAMA_URL}/api/chat`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -939,7 +939,7 @@ Respond with ONLY the number of the best response (1-${valid.length}), nothing e
             messages: [{ role: 'user', content: judgePrompt }],
             stream: false
           })
-        });
+        }, UPSTREAM_TIMEOUT_MS);
         const judgeData = await judgeResp.json();
         const judgeText = judgeData?.message?.content || '';
         const match = judgeText.match(/\d+/);
@@ -1136,7 +1136,7 @@ app.post('/api/training/start', (req, res) => {
           module: activeJob.module,
           status: activeJob.status
         }
-      });
+      }, UPSTREAM_TIMEOUT_MS);
     }
 
     if (!fs.existsSync(TRAINING_RUNNER)) {
@@ -1179,7 +1179,7 @@ app.post('/api/training/start', (req, res) => {
       job.status = 'failed';
       job.exitCode = -1;
       job.finishedAt = new Date().toISOString();
-    });
+    }, STREAM_TIMEOUT_MS);
     child.on('close', (code) => {
       flushTrainingLog(job);
       job.exitCode = code;
@@ -1233,9 +1233,7 @@ app.post('/api/generate-world', async (req, res) => {
     console.log('Generating world for prompt:', prompt);
 
     // Spawn Python process to generate world
-    const pythonPath = process.platform === 'win32'
-      ? path.join(process.cwd(), '.venv', 'Scripts', 'python.exe')
-      : 'python';
+    const pythonPath = resolvePythonPath();
 
     const modelPath = path.join(process.cwd(), 'ai_training', 'world_generator', 'models', 'world_generator_final');
 
@@ -1249,14 +1247,21 @@ app.post('/api/generate-world', async (req, res) => {
     }
 
     // Create a temporary Python script to generate world
+    const promptB64 = Buffer.from(prompt, 'utf8').toString('base64');
     const generateScript = `
+import base64
+import json
+import os
+import sys
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
-import json
-import sys
 
-MODEL_PATH = "${modelPath.replace(/\\/g, '/')}"
-PROMPT = """${prompt.replace(/"/g, '\\"')}"""
+MODEL_PATH = ${JSON.stringify(modelPath.replace(/\\/g, '/'))}
+PROMPT_B64 = os.environ.get("PROMPT_B64", "")
+try:
+    PROMPT = base64.b64decode(PROMPT_B64).decode("utf-8", errors="replace")
+except Exception:
+    PROMPT = ""
 
 try:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -1296,7 +1301,9 @@ except Exception as e:
 `;
 
     // Run Python script
-    const py = spawn(pythonPath, ['-c', generateScript]);
+    const py = spawn(pythonPath, ['-c', generateScript], {
+      env: { ...process.env, PROMPT_B64: promptB64, PYTHONUNBUFFERED: '1' }
+    });
     
     let stdout = '';
     let stderr = '';
