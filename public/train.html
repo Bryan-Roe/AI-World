@@ -1,0 +1,932 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Model Forge - Training Lab</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f6f2ea;
+      --panel: #ffffff;
+      --ink: #121318;
+      --muted: #55616c;
+      --accent: #d0673c;
+      --accent-2: #2f7f7a;
+      --accent-3: #f0b35a;
+      --line: #e5ddcf;
+      --shadow: rgba(17, 19, 24, 0.08);
+      --shadow-strong: rgba(17, 19, 24, 0.18);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: radial-gradient(120% 90% at 15% 0%, rgba(208, 103, 60, 0.18), transparent 55%),
+                  radial-gradient(100% 100% at 100% 10%, rgba(47, 127, 122, 0.16), transparent 48%),
+                  var(--bg);
+      min-height: 100vh;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: -20% 0 0 0;
+      background: repeating-linear-gradient(35deg, rgba(17, 19, 24, 0.04) 0, rgba(17, 19, 24, 0.04) 1px, transparent 1px, transparent 14px);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .page {
+      position: relative;
+      z-index: 1;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 28px 20px 40px;
+    }
+
+    header.hero {
+      display: grid;
+      grid-template-columns: 1.3fr 0.7fr;
+      gap: 24px;
+      align-items: stretch;
+      margin-bottom: 24px;
+      animation: fadeUp 0.6s ease both;
+    }
+
+    .hero-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 14px;
+    }
+
+    .brand {
+      font-family: "Bebas Neue", sans-serif;
+      letter-spacing: 0.08em;
+      font-size: 20px;
+      text-transform: uppercase;
+      color: var(--accent-2);
+    }
+
+    nav a {
+      text-decoration: none;
+      color: var(--muted);
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-left: 14px;
+    }
+
+    nav a:hover {
+      color: var(--ink);
+    }
+
+    .hero-card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 20px;
+      box-shadow: 0 18px 50px var(--shadow);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .hero-eyebrow {
+      text-transform: uppercase;
+      font-size: 12px;
+      letter-spacing: 0.2em;
+      color: var(--muted);
+    }
+
+    h1 {
+      font-family: "Bebas Neue", sans-serif;
+      font-size: clamp(42px, 6vw, 64px);
+      letter-spacing: 0.04em;
+      margin: 8px 0 12px;
+    }
+
+    .lead {
+      margin: 0;
+      font-size: 16px;
+      line-height: 1.6;
+      color: var(--muted);
+    }
+
+    .hero-metric {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      color: var(--muted);
+      border-bottom: 1px dashed var(--line);
+      padding-bottom: 8px;
+    }
+
+    .hero-metric span {
+      color: var(--ink);
+      font-weight: 600;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1.05fr 0.95fr;
+      gap: 20px;
+      align-items: start;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 20px;
+      box-shadow: 0 14px 40px var(--shadow);
+      animation: fadeUp 0.6s ease both;
+      animation-delay: var(--delay, 0s);
+    }
+
+    .panel h2 {
+      margin: 0 0 14px;
+      font-size: 18px;
+      letter-spacing: 0.02em;
+    }
+
+    .panel p {
+      margin: 0 0 12px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .module-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 12px;
+    }
+
+    .module-card {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px;
+      cursor: pointer;
+      transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+      background: linear-gradient(140deg, rgba(240, 179, 90, 0.12), transparent 60%);
+    }
+
+    .module-card[data-active="true"] {
+      border-color: var(--accent-2);
+      box-shadow: 0 12px 30px rgba(47, 127, 122, 0.18);
+      transform: translateY(-2px);
+    }
+
+    .module-card h3 {
+      margin: 0 0 6px;
+      font-size: 16px;
+    }
+
+    .module-card span {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .field-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .field label {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+    }
+
+    .field input,
+    .field select,
+    .field textarea {
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      font-size: 14px;
+      font-family: inherit;
+      background: #faf8f4;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .field input:focus,
+    .field select:focus,
+    .field textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(208, 103, 60, 0.2);
+    }
+
+    .field textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+
+    .field.inline {
+      flex-direction: row;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .field.inline input {
+      width: auto;
+    }
+
+    .note {
+      background: rgba(47, 127, 122, 0.1);
+      border: 1px solid rgba(47, 127, 122, 0.3);
+      border-radius: 12px;
+      padding: 12px;
+      font-size: 13px;
+      color: #245a56;
+      line-height: 1.5;
+    }
+
+    .paths {
+      display: grid;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .path-row {
+      display: grid;
+      grid-template-columns: 70px 1fr auto;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .path-label {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+    }
+
+    .path-value {
+      font-size: 13px;
+      background: #f8f4ed;
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      word-break: break-all;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      border: 1px solid var(--line);
+      background: #fbf8f2;
+      color: var(--muted);
+    }
+
+    .status-pill[data-tone="running"] {
+      color: #1a5e4c;
+      border-color: rgba(47, 127, 122, 0.5);
+      background: rgba(47, 127, 122, 0.12);
+    }
+
+    .status-pill[data-tone="done"] {
+      color: #7a4f12;
+      border-color: rgba(208, 103, 60, 0.4);
+      background: rgba(208, 103, 60, 0.12);
+    }
+
+    .status-pill[data-tone="error"] {
+      color: #9b3b2c;
+      border-color: rgba(155, 59, 44, 0.4);
+      background: rgba(155, 59, 44, 0.12);
+    }
+
+    .btn {
+      padding: 10px 16px;
+      border-radius: 12px;
+      border: 1px solid transparent;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 14px;
+      transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+      font-family: inherit;
+    }
+
+    .btn.primary {
+      background: var(--accent);
+      color: #fff;
+      box-shadow: 0 10px 20px rgba(208, 103, 60, 0.25);
+    }
+
+    .btn.primary:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 12px 24px rgba(208, 103, 60, 0.3);
+    }
+
+    .btn.ghost {
+      background: transparent;
+      border-color: var(--line);
+      color: var(--muted);
+    }
+
+    .btn.ghost:hover:not(:disabled) {
+      border-color: var(--accent-2);
+      color: var(--ink);
+    }
+
+    .btn.tiny {
+      padding: 6px 10px;
+      font-size: 12px;
+    }
+
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .monitor {
+      position: sticky;
+      top: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .monitor-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .monitor-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .job-meta {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 8px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .job-meta span {
+      color: var(--ink);
+      font-weight: 600;
+    }
+
+    .log-output {
+      background: #14181f;
+      color: #e7edf4;
+      padding: 14px;
+      border-radius: 14px;
+      font-size: 12px;
+      line-height: 1.5;
+      height: 320px;
+      overflow-y: auto;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+      font-family: "Consolas", "Courier New", monospace;
+      white-space: pre-wrap;
+    }
+
+    .notice {
+      font-size: 13px;
+      color: #9b3b2c;
+      background: rgba(155, 59, 44, 0.12);
+      border: 1px solid rgba(155, 59, 44, 0.3);
+      padding: 10px 12px;
+      border-radius: 12px;
+      display: none;
+    }
+
+    .notice[data-show="true"] {
+      display: block;
+    }
+
+    @keyframes fadeUp {
+      from {
+        opacity: 0;
+        transform: translateY(12px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @media (max-width: 980px) {
+      header.hero {
+        grid-template-columns: 1fr;
+      }
+
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      .monitor {
+        position: static;
+      }
+
+      .hero-top {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="hero">
+      <div>
+        <div class="hero-top">
+          <div class="brand">Model Forge</div>
+          <nav>
+            <a href="index.html">Chat</a>
+            <a href="game.html">3D world</a>
+            <a href="world_generator.html">World generator</a>
+          </nav>
+        </div>
+        <div class="hero-eyebrow">Training studio</div>
+        <h1>Train new models from scratch</h1>
+        <p class="lead">Launch local training runs, monitor output live, and keep your data aligned with each module. One job runs at a time to keep GPU memory stable.</p>
+      </div>
+      <div class="hero-card">
+        <div class="hero-metric">Active job <span id="activeJobLabel">None</span></div>
+        <div class="hero-metric">Runner <span>training_runner.py</span></div>
+        <div class="hero-metric">Device <span id="deviceLabel">Auto</span></div>
+        <div class="hero-metric">Logs retained <span>1500 lines</span></div>
+      </div>
+    </header>
+
+    <main class="grid">
+      <section class="panel" style="--delay: 0.05s;">
+        <h2>1. Choose a training track</h2>
+        <p>Select the module you want to train. Each track uses its own data and output folders.</p>
+        <div class="module-grid" id="moduleGrid"></div>
+      </section>
+
+      <section class="panel" style="--delay: 0.1s;">
+        <h2>2. Tune parameters</h2>
+        <div class="field-grid" id="configFields"></div>
+        <div class="field">
+          <label for="overrides">Advanced overrides (JSON)</label>
+          <textarea id="overrides" placeholder='{"epochs": 5, "learning_rate": 0.0002}'></textarea>
+        </div>
+      </section>
+
+      <section class="panel" style="--delay: 0.15s;">
+        <h2>3. Data and output</h2>
+        <div class="paths">
+          <div class="path-row">
+            <div class="path-label">Data</div>
+            <div class="path-value" id="dataPath">-</div>
+            <button class="btn tiny ghost" data-copy="data">Copy</button>
+          </div>
+          <div class="path-row">
+            <div class="path-label">Models</div>
+            <div class="path-value" id="outputPath">-</div>
+            <button class="btn tiny ghost" data-copy="output">Copy</button>
+          </div>
+        </div>
+        <div class="note" id="moduleNote">Pick a module to see dataset instructions.</div>
+      </section>
+
+      <section class="panel monitor" style="--delay: 0.2s;">
+        <div class="monitor-head">
+          <div>
+            <h2>Run monitor</h2>
+            <p>Live logs and status for the current training job.</p>
+          </div>
+          <span class="status-pill" id="jobStatus" data-tone="idle">Idle</span>
+        </div>
+        <div class="monitor-actions">
+          <button class="btn primary" id="startBtn">Start training</button>
+          <button class="btn ghost" id="stopBtn" disabled>Stop</button>
+          <button class="btn ghost" id="clearLogs">Clear logs</button>
+        </div>
+        <div class="notice" id="formNotice"></div>
+        <div class="job-meta">
+          <div>Job ID: <span id="jobId">-</span></div>
+          <div>Module: <span id="jobModule">-</span></div>
+          <div>Started: <span id="jobStart">-</span></div>
+          <div>Exit: <span id="jobExit">-</span></div>
+        </div>
+        <pre class="log-output" id="logOutput">No logs yet.</pre>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const modules = {
+      language_model: {
+        title: "Language model",
+        summary: "Fine-tune a text generator on your corpus.",
+        dataPath: "ai_training/language_model/data/train.txt",
+        outputPath: "ai_training/language_model/models/",
+        note: "Provide a train.txt or JSONL file in the data folder before launching.",
+        fields: [
+          { key: "base_model", label: "Base model", type: "text", value: "distilgpt2" },
+          { key: "epochs", label: "Epochs", type: "number", value: 3, min: 1, step: 1 },
+          { key: "batch_size", label: "Batch size", type: "number", value: 4, min: 1, step: 1 },
+          { key: "learning_rate", label: "Learning rate", type: "number", value: 0.00005, min: 0, step: 0.00001 },
+          { key: "max_length", label: "Max length", type: "number", value: 512, min: 64, step: 16 },
+          { key: "use_lora", label: "Use LoRA", type: "checkbox", value: true }
+        ]
+      },
+      image_classifier: {
+        title: "Image classifier",
+        summary: "Train a vision model from your image folders.",
+        dataPath: "ai_training/image_classifier/data/train/",
+        outputPath: "ai_training/image_classifier/models/",
+        note: "Create class folders under train/ and optional val/ before running.",
+        fields: [
+          { key: "model_type", label: "Model type", type: "select", value: "resnet18", options: ["resnet18", "resnet34", "resnet50", "efficientnet", "custom"] },
+          { key: "epochs", label: "Epochs", type: "number", value: 20, min: 1, step: 1 },
+          { key: "batch_size", label: "Batch size", type: "number", value: 32, min: 1, step: 1 },
+          { key: "learning_rate", label: "Learning rate", type: "number", value: 0.001, min: 0, step: 0.0001 },
+          { key: "image_size", label: "Image size", type: "number", value: 224, min: 64, step: 16 },
+          { key: "pretrained", label: "Use pretrained", type: "checkbox", value: true },
+          { key: "freeze_backbone", label: "Freeze backbone", type: "checkbox", value: true },
+          { key: "unfreeze_epoch", label: "Unfreeze epoch", type: "number", value: 5, min: 0, step: 1 }
+        ]
+      },
+      game_ai: {
+        title: "Game AI",
+        summary: "Train a reinforcement learning agent.",
+        dataPath: "ai_training/game_ai/models/",
+        outputPath: "ai_training/game_ai/models/",
+        note: "This run simulates the game world and writes checkpoints to the model folder.",
+        fields: [
+          { key: "algorithm", label: "Algorithm", type: "select", value: "ppo", options: ["ppo", "dqn", "a2c"] },
+          { key: "episodes", label: "Episodes", type: "number", value: 1000, min: 1, step: 10 },
+          { key: "max_steps", label: "Max steps", type: "number", value: 500, min: 10, step: 10 },
+          { key: "batch_size", label: "Batch size", type: "number", value: 64, min: 1, step: 1 },
+          { key: "lr", label: "Learning rate", type: "number", value: 0.0003, min: 0, step: 0.0001 },
+          { key: "world_size", label: "World size", type: "number", value: 200, min: 50, step: 10 }
+        ]
+      },
+      custom_nn: {
+        title: "Custom neural net",
+        summary: "Build a flexible network from scratch.",
+        dataPath: "ai_training/custom_nn/models/",
+        outputPath: "ai_training/custom_nn/models/",
+        note: "Provide numpy arrays in code or use the synthetic demo data.",
+        fields: [
+          { key: "preset", label: "Preset", type: "select", value: "default", options: ["default", "mnist_classifier", "image_autoencoder", "simple_gan", "regression"] },
+          { key: "task", label: "Task", type: "select", value: "classification", options: ["classification", "regression", "autoencoder", "gan"] },
+          { key: "input_dim", label: "Input dim", type: "number", value: 784, min: 1, step: 1 },
+          { key: "output_dim", label: "Output dim", type: "number", value: 10, min: 1, step: 1 },
+          { key: "hidden_layers", label: "Hidden layers", type: "text", value: "512,256,128" },
+          { key: "activation", label: "Activation", type: "select", value: "relu", options: ["relu", "leaky_relu", "elu", "gelu", "silu", "tanh", "sigmoid"] },
+          { key: "dropout", label: "Dropout", type: "number", value: 0.3, min: 0, step: 0.05 },
+          { key: "batch_norm", label: "Batch norm", type: "checkbox", value: true },
+          { key: "epochs", label: "Epochs", type: "number", value: 50, min: 1, step: 1 },
+          { key: "batch_size", label: "Batch size", type: "number", value: 64, min: 1, step: 1 },
+          { key: "learning_rate", label: "Learning rate", type: "number", value: 0.001, min: 0, step: 0.0001 }
+        ]
+      },
+      world_generator: {
+        title: "World generator",
+        summary: "Fine-tune a model for 3D world JSON.",
+        dataPath: "ai_training/world_generator/data/",
+        outputPath: "ai_training/world_generator/models/",
+        note: "The trainer will generate synthetic data automatically when it runs.",
+        fields: [
+          { key: "base_model", label: "Base model", type: "text", value: "distilgpt2" },
+          { key: "epochs", label: "Epochs", type: "number", value: 5, min: 1, step: 1 },
+          { key: "batch_size", label: "Batch size", type: "number", value: 2, min: 1, step: 1 },
+          { key: "gradient_accumulation_steps", label: "Grad accumulation", type: "number", value: 8, min: 1, step: 1 },
+          { key: "learning_rate", label: "Learning rate", type: "number", value: 0.00005, min: 0, step: 0.00001 },
+          { key: "max_length", label: "Max length", type: "number", value: 1024, min: 128, step: 32 },
+          { key: "num_training_samples", label: "Samples", type: "number", value: 500, min: 50, step: 50 }
+        ]
+      }
+    };
+
+    const moduleGrid = document.getElementById("moduleGrid");
+    const configFields = document.getElementById("configFields");
+    const overrides = document.getElementById("overrides");
+    const dataPath = document.getElementById("dataPath");
+    const outputPath = document.getElementById("outputPath");
+    const moduleNote = document.getElementById("moduleNote");
+    const jobStatus = document.getElementById("jobStatus");
+    const jobId = document.getElementById("jobId");
+    const jobModule = document.getElementById("jobModule");
+    const jobStart = document.getElementById("jobStart");
+    const jobExit = document.getElementById("jobExit");
+    const logOutput = document.getElementById("logOutput");
+    const startBtn = document.getElementById("startBtn");
+    const stopBtn = document.getElementById("stopBtn");
+    const clearLogsBtn = document.getElementById("clearLogs");
+    const formNotice = document.getElementById("formNotice");
+    const activeJobLabel = document.getElementById("activeJobLabel");
+
+    let selectedModule = "language_model";
+    let activeJobId = null;
+    let logCursor = 0;
+    let pollTimer = null;
+    const logLines = [];
+    const LOG_VIEW_LIMIT = 400;
+
+    function setNotice(message) {
+      if (!message) {
+        formNotice.dataset.show = "false";
+        formNotice.textContent = "";
+        return;
+      }
+      formNotice.dataset.show = "true";
+      formNotice.textContent = message;
+    }
+
+    function setStatus(label, tone) {
+      jobStatus.textContent = label;
+      jobStatus.dataset.tone = tone || "idle";
+    }
+
+    function renderModuleCards() {
+      moduleGrid.innerHTML = "";
+      Object.entries(modules).forEach(([key, mod]) => {
+        const card = document.createElement("div");
+        card.className = "module-card";
+        card.dataset.active = key === selectedModule ? "true" : "false";
+        card.innerHTML = `<h3>${mod.title}</h3><p>${mod.summary}</p><span>${mod.dataPath}</span>`;
+        card.addEventListener("click", () => selectModule(key));
+        moduleGrid.appendChild(card);
+      });
+    }
+
+    function renderFields() {
+      const mod = modules[selectedModule];
+      configFields.innerHTML = "";
+      mod.fields.forEach(field => {
+        const wrapper = document.createElement("div");
+        wrapper.className = field.type === "checkbox" ? "field inline" : "field";
+        const label = document.createElement("label");
+        label.textContent = field.label;
+        wrapper.appendChild(label);
+
+        let input;
+        if (field.type === "select") {
+          input = document.createElement("select");
+          field.options.forEach(option => {
+            const opt = document.createElement("option");
+            opt.value = option;
+            opt.textContent = option;
+            if (option === field.value) opt.selected = true;
+            input.appendChild(opt);
+          });
+        } else if (field.type === "checkbox") {
+          input = document.createElement("input");
+          input.type = "checkbox";
+          input.checked = Boolean(field.value);
+        } else {
+          input = document.createElement("input");
+          input.type = field.type === "number" ? "number" : "text";
+          input.value = field.value;
+          if (field.min !== undefined) input.min = field.min;
+          if (field.step !== undefined) input.step = field.step;
+        }
+
+        input.dataset.key = field.key;
+        input.dataset.type = field.type;
+        wrapper.appendChild(input);
+        configFields.appendChild(wrapper);
+      });
+
+      dataPath.textContent = mod.dataPath;
+      outputPath.textContent = mod.outputPath;
+      moduleNote.textContent = mod.note;
+    }
+
+    function selectModule(key) {
+      selectedModule = key;
+      renderModuleCards();
+      renderFields();
+      setNotice("");
+    }
+
+    function collectConfig() {
+      const mod = modules[selectedModule];
+      const config = {};
+      const inputs = configFields.querySelectorAll("[data-key]");
+      inputs.forEach(input => {
+        const key = input.dataset.key;
+        const type = input.dataset.type;
+        let value;
+        if (type === "checkbox") {
+          value = input.checked;
+        } else if (type === "number") {
+          value = Number(input.value);
+        } else {
+          value = input.value.trim();
+        }
+        if (key === "hidden_layers") {
+          value = value.split(",").map(part => part.trim()).filter(Boolean).map(Number);
+        }
+        if (key === "preset" && value === "default") {
+          return;
+        }
+        if (Number.isNaN(value)) {
+          return;
+        }
+        config[key] = value;
+      });
+
+      const overrideText = overrides.value.trim();
+      if (overrideText) {
+        try {
+          const overrideConfig = JSON.parse(overrideText);
+          Object.assign(config, overrideConfig);
+        } catch (err) {
+          setNotice("Overrides JSON is invalid. Fix it or clear the box.");
+          return null;
+        }
+      }
+
+      return config;
+    }
+
+    function appendLogs(lines) {
+      if (!lines.length) return;
+      logLines.push(...lines);
+      if (logLines.length > LOG_VIEW_LIMIT) {
+        logLines.splice(0, logLines.length - LOG_VIEW_LIMIT);
+      }
+      logOutput.textContent = logLines.join("\n");
+      logOutput.scrollTop = logOutput.scrollHeight;
+    }
+
+    function updateJobMeta(data) {
+      jobId.textContent = data.id || "-";
+      jobModule.textContent = data.module || "-";
+      jobStart.textContent = data.startedAt || "-";
+      jobExit.textContent = data.exitCode === null || data.exitCode === undefined ? "-" : String(data.exitCode);
+      activeJobLabel.textContent = data.status === "running" ? data.module : "None";
+    }
+
+    async function pollLogs() {
+      if (!activeJobId) return;
+      try {
+        const resp = await fetch(`/api/training/logs/${activeJobId}?cursor=${logCursor}`);
+        if (!resp.ok) {
+          setNotice("Failed to read training logs.");
+          return;
+        }
+        const data = await resp.json();
+        logCursor = data.cursor;
+        appendLogs(data.lines || []);
+        updateJobMeta(data);
+
+        if (data.status === "running" || data.status === "stopping") {
+          setStatus(data.status === "running" ? "Running" : "Stopping", "running");
+          stopBtn.disabled = false;
+          startBtn.disabled = true;
+          pollTimer = setTimeout(pollLogs, 1500);
+        } else if (data.status === "completed") {
+          setStatus("Completed", "done");
+          stopBtn.disabled = true;
+          startBtn.disabled = false;
+          activeJobId = null;
+        } else if (data.status === "failed") {
+          setStatus("Failed", "error");
+          stopBtn.disabled = true;
+          startBtn.disabled = false;
+          activeJobId = null;
+        } else if (data.status === "stopped") {
+          setStatus("Stopped", "done");
+          stopBtn.disabled = true;
+          startBtn.disabled = false;
+          activeJobId = null;
+        } else {
+          setStatus("Idle", "idle");
+        }
+      } catch (err) {
+        setNotice("Could not reach the server for training updates.");
+      }
+    }
+
+    async function startTraining() {
+      setNotice("");
+      const config = collectConfig();
+      if (!config) return;
+      startBtn.disabled = true;
+      stopBtn.disabled = true;
+      setStatus("Starting", "running");
+
+      try {
+        const resp = await fetch("/api/training/start", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ module: selectedModule, config })
+        });
+
+        if (resp.status === 409) {
+          const data = await resp.json();
+          setNotice("Another training job is already running. Monitoring it now.");
+          if (data.activeJob && data.activeJob.id) {
+            activeJobId = data.activeJob.id;
+            logCursor = 0;
+            pollLogs();
+          }
+          return;
+        }
+
+        if (!resp.ok) {
+          setNotice("Failed to start training. Check server logs.");
+          setStatus("Idle", "idle");
+          startBtn.disabled = false;
+          return;
+        }
+
+        const data = await resp.json();
+        activeJobId = data.id;
+        logCursor = 0;
+        logLines.length = 0;
+        logOutput.textContent = "Starting training...";
+        setStatus("Running", "running");
+        pollLogs();
+      } catch (err) {
+        setNotice("Training start failed. Is the server running?");
+        setStatus("Idle", "idle");
+        startBtn.disabled = false;
+      }
+    }
+
+    async function stopTraining() {
+      if (!activeJobId) return;
+      setNotice("");
+      try {
+        await fetch(`/api/training/stop/${activeJobId}`, { method: "POST" });
+        setStatus("Stopping", "running");
+        stopBtn.disabled = true;
+      } catch (err) {
+        setNotice("Failed to stop training job.");
+      }
+    }
+
+    function clearLogs() {
+      logLines.length = 0;
+      logOutput.textContent = "No logs yet.";
+    }
+
+    function copyPath(kind) {
+      const text = kind === "data" ? dataPath.textContent : outputPath.textContent;
+      if (!text || text === "-") return;
+      navigator.clipboard.writeText(text).catch(() => {});
+    }
+
+    async function hydrateActiveJob() {
+      try {
+        const resp = await fetch("/api/training/jobs");
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const running = data.jobs.find(job => job.status === "running" || job.status === "stopping");
+        if (running) {
+          activeJobId = running.id;
+          logCursor = 0;
+          setStatus(running.status === "running" ? "Running" : "Stopping", "running");
+          pollLogs();
+        }
+      } catch (err) {
+        setNotice("Could not load training status from server.");
+      }
+    }
+
+    moduleGrid.addEventListener("click", () => {});
+    startBtn.addEventListener("click", startTraining);
+    stopBtn.addEventListener("click", stopTraining);
+    clearLogsBtn.addEventListener("click", clearLogs);
+
+    document.querySelectorAll("[data-copy]").forEach(btn => {
+      btn.addEventListener("click", () => copyPath(btn.dataset.copy));
+    });
+
+    selectModule(selectedModule);
+    hydrateActiveJob();
+  </script>
+</body>
+</html>
