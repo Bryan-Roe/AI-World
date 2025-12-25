@@ -39,7 +39,22 @@ class WorldGenerator {
       voiceEnabled: true,
       voiceRate: 1.02,
       voicePitch: 1.05,
-      voiceVolume: 0.85
+      voiceVolume: 0.85,
+      // Enhanced features
+      emotion: 'calm',
+      visualState: 'idle', // idle, moving, thinking, talking
+      pathNodes: [],
+      currentPathIndex: 0,
+      obstacleMemory: new Map(),
+      lastThinkTime: 0,
+      thinkInterval: 5000,
+      conversationHistory: [],
+      maxConversationHistory: 10,
+      statusIndicator: null,
+      emotionParticles: [],
+      idleAnimTimer: 0,
+      lookAtTarget: null,
+      smoothRotation: 0
     };
     this.resident = {
       mesh: null,
@@ -2919,12 +2934,27 @@ Rules:
     };
     const personalityDesc = personalities[this.companion.personality] || 'friendly';
     
-    // Include recent memory
-    const recentMemory = this.companion.memory.slice(-3).map(m => m.event).join('. ');
+    // Enhanced memory with conversation history
+    const recentMemory = this.companion.memory.slice(-5).map(m => m.event).join('. ');
+    const recentConversation = this.companion.conversationHistory.slice(-3)
+      .map(c => `${c.role}: ${c.message}`).join(' | ');
     const memoryContext = recentMemory ? ` Recent events: ${recentMemory}.` : '';
+    const conversationContext = recentConversation ? ` Recent chat: ${recentConversation}.` : '';
     
-    const system = `You are a ${personalityDesc} in-world AI companion. Respond ONLY with JSON. Schema: {"action":"move|follow|explore|guard","target":[x,z],"message":"short text","speed":30,"emotion":"happy|curious|alert|calm"}. Rules: stay within 80 units of player, be helpful and ${personalityDesc}, keep messages short (<=60 chars), adapt behavior to situation.${memoryContext}`;
-    const user = `Player and world state: ${JSON.stringify(state)}. Biome: ${this.getBiome(Math.floor(state.player.x / this.chunkSize), Math.floor(state.player.z / this.chunkSize))}`;
+    // Biome and time context
+    const biome = this.getBiome(Math.floor(state.player.x / this.chunkSize), Math.floor(state.player.z / this.chunkSize));
+    const timeOfDay = this.timeOfDay < 0.25 || this.timeOfDay > 0.75 ? 'night' : 'day';
+    
+    // Personality-specific behaviors
+    const personalityBehaviors = {
+      friendly: 'Prioritize social engagement, offer help proactively, celebrate player achievements, use encouraging language.',
+      curious: 'Ask questions about surroundings, suggest exploration, point out interesting objects, express wonder and excitement.',
+      protective: 'Watch for dangers, warn about risky actions, stay close to player, suggest safe paths, react to threats.'
+    };
+    const behaviorHint = personalityBehaviors[this.companion.personality] || '';
+    
+    const system = `You are a ${personalityDesc} in-world AI companion. ${behaviorHint} Respond ONLY with JSON. Schema: {"action":"move|follow|explore|guard","target":[x,z],"message":"short text","speed":30,"emotion":"happy|curious|alert|calm|thinking","priority":"low|medium|high"}. Rules: stay within 80 units of player, keep messages short (<=60 chars), adapt behavior to biome, time, and weather, remember previous interactions.${memoryContext}${conversationContext}`;
+    const user = `Player and world state: ${JSON.stringify(state)}. Biome: ${biome}, Time: ${timeOfDay}, Weather: ${this.weatherType}`;
     
     try {
       const resp = await fetch('/api/chat', {
@@ -2947,17 +2977,38 @@ Rules:
       
       if (parsed.message) {
         const emotion = parsed.emotion || '💬';
-        const emotionIcons = { happy: '😊', curious: '🤔', alert: '⚠️', calm: '😌' };
+        const emotionIcons = { happy: '😊', curious: '🤔', alert: '⚠️', calm: '😌', thinking: '💭' };
         const icon = emotionIcons[emotion] || '💬';
         this.setCompanionMessage(`${icon} ${parsed.message}`);
         
-        // Store in memory
+        // Update companion visual state
+        this.companion.emotion = parsed.emotion || 'calm';
+        this.companion.visualState = 'idle';
+        
+        // Store in conversation history
+        this.companion.conversationHistory.push({
+          role: 'companion',
+          message: parsed.message,
+          timestamp: Date.now()
+        });
+        if (this.companion.conversationHistory.length > this.companion.maxConversationHistory) {
+          this.companion.conversationHistory.shift();
+        }
+        
+        // Store in memory with priority
         this.companion.memory.push({
           time: Date.now(),
           event: parsed.message,
-          action: parsed.action
+          action: parsed.action,
+          priority: parsed.priority || 'low',
+          emotion: parsed.emotion
         });
-        if (this.companion.memory.length > 10) this.companion.memory.shift();
+        // Keep high priority memories longer
+        if (this.companion.memory.length > 20) {
+          this.companion.memory = this.companion.memory
+            .filter(m => m.priority === 'high')
+            .concat(this.companion.memory.slice(-15));
+        }
       }
       
       // Check for active waypoint first
@@ -3167,29 +3218,64 @@ Rules:
     this.updateAutoLoot(delta);
     this.updateResourceCallouts();
     
-    // If no target, return early
-    if (!this.companion.target) return;
+    // Update visual states
+    this.updateCompanionVisuals(delta);
+    
+    // If no target, idle behavior
+    if (!this.companion.target) {
+      this.companion.visualState = 'idle';
+      this.updateCompanionIdleAnimation(delta);
+      return;
+    }
     
     const pos = this.companion.mesh.position;
     const target = this.companion.target;
     const dir = this._tmpVec3a.set(target.x - pos.x, 0, target.z - pos.z);
     const dist = dir.length();
-    if (dist < 0.8) return;
+    
+    if (dist < 0.8) {
+      this.companion.visualState = 'idle';
+      return;
+    }
+    
+    this.companion.visualState = 'moving';
     dir.normalize();
 
-    // Clamp speed and avoid clipping through player
+    // Advanced obstacle avoidance using raycasting
+    const avoidanceDir = this.getObstacleAvoidanceVector(pos, dir);
+    if (avoidanceDir) {
+      dir.lerp(avoidanceDir, 0.7); // Blend avoidance with target direction
+      dir.normalize();
+    }
+
+    // Smooth speed adjustment based on distance
     const playerPos = this.controls?.getObject?.().position || this.camera.position;
     const minDistToPlayer = 3;
-    const speed = Math.max(5, Math.min(120, this.companion.speed || 40));
-    const maxStep = speed * delta;
+    const maxDistToPlayer = 20;
+    const distToPlayer = Math.sqrt(
+      Math.pow(pos.x - playerPos.x, 2) + Math.pow(pos.z - playerPos.z, 2)
+    );
+    
+    // Dynamic speed based on distance to player
+    let baseSpeed = Math.max(5, Math.min(120, this.companion.speed || 40));
+    if (distToPlayer > maxDistToPlayer) {
+      baseSpeed *= 1.5; // Speed up to catch up
+    } else if (distToPlayer < minDistToPlayer * 1.5) {
+      baseSpeed *= 0.5; // Slow down when close
+    }
+    
+    const maxStep = baseSpeed * delta;
     const step = Math.min(maxStep, Math.max(0, dist - 0.8));
 
+    // Calculate next position with collision avoidance
     const nextX = pos.x + dir.x * step;
     const nextZ = pos.z + dir.z * step;
     const dxp = nextX - playerPos.x;
     const dzp = nextZ - playerPos.z;
     const d2p = (dxp * dxp) + (dzp * dzp);
+    
     if (d2p < (minDistToPlayer * minDistToPlayer)) {
+      // Push away from player if too close
       const push = this._tmpVec3b.set(dxp, 0, dzp);
       const plen = push.length() || 1;
       push.multiplyScalar((minDistToPlayer - Math.sqrt(d2p)) / plen);
@@ -3199,7 +3285,125 @@ Rules:
       pos.x = nextX;
       pos.z = nextZ;
     }
-    pos.y = this.playerHeight; // keep companion at player height
+    
+    // Smooth vertical positioning with slight bobbing
+    const bobAmount = Math.sin(Date.now() * 0.003) * 0.2;
+    pos.y = this.playerHeight + bobAmount;
+    
+    // Smooth rotation towards movement direction
+    const targetAngle = Math.atan2(dir.x, dir.z);
+    this.companion.smoothRotation = this.lerpAngle(
+      this.companion.smoothRotation,
+      targetAngle,
+      delta * 5
+    );
+    this.companion.mesh.rotation.y = this.companion.smoothRotation;
+  }
+
+  lerpAngle(a, b, t) {
+    // Shortest path angle interpolation
+    let diff = b - a;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    return a + diff * t;
+  }
+
+  getObstacleAvoidanceVector(pos, dir) {
+    // Raycast in movement direction and sides to detect obstacles
+    const raycaster = new THREE.Raycaster();
+    const rays = [
+      { angle: 0, weight: 1.0 },
+      { angle: Math.PI / 4, weight: 0.7 },
+      { angle: -Math.PI / 4, weight: 0.7 },
+      { angle: Math.PI / 2, weight: 0.5 },
+      { angle: -Math.PI / 2, weight: 0.5 }
+    ];
+    
+    let avoidanceVector = new THREE.Vector3();
+    let hasObstacle = false;
+    
+    for (const ray of rays) {
+      const angle = Math.atan2(dir.x, dir.z) + ray.angle;
+      const rayDir = new THREE.Vector3(Math.sin(angle), 0, Math.cos(angle));
+      raycaster.set(pos, rayDir);
+      
+      const intersects = raycaster.intersectObjects(
+        this.interactableObjects.filter(o => o !== this.companion.mesh),
+        false
+      );
+      
+      if (intersects.length > 0 && intersects[0].distance < 5) {
+        hasObstacle = true;
+        // Add avoidance force perpendicular to obstacle
+        const avoidDir = new THREE.Vector3(-rayDir.z, 0, rayDir.x);
+        avoidanceVector.add(avoidDir.multiplyScalar(ray.weight));
+      }
+    }
+    
+    if (hasObstacle && avoidanceVector.lengthSq() > 0) {
+      return avoidanceVector.normalize();
+    }
+    return null;
+  }
+
+  updateCompanionIdleAnimation(delta) {
+    this.companion.idleAnimTimer += delta;
+    const mesh = this.companion.mesh;
+    
+    // Gentle idle bobbing
+    const bob = Math.sin(this.companion.idleAnimTimer * 2) * 0.15;
+    mesh.position.y = this.playerHeight + bob;
+    
+    // Random look around
+    if (this.companion.idleAnimTimer > 3) {
+      this.companion.idleAnimTimer = 0;
+      const randomAngle = Math.random() * Math.PI * 2;
+      this.companion.lookAtTarget = randomAngle;
+    }
+    
+    if (this.companion.lookAtTarget !== null) {
+      mesh.rotation.y = this.lerpAngle(
+        mesh.rotation.y,
+        this.companion.lookAtTarget,
+        delta * 2
+      );
+    }
+  }
+
+  updateCompanionVisuals(delta) {
+    if (!this.companion.mesh) return;
+    
+    // Update color based on emotion
+    const emotions = {
+      happy: 0x00ff88,
+      curious: 0x00aaff,
+      alert: 0xff8800,
+      calm: 0x88ff00,
+      thinking: 0xaa88ff
+    };
+    
+    const targetColor = emotions[this.companion.emotion] || emotions.calm;
+    const currentColor = this.companion.mesh.material.color.getHex();
+    
+    // Smooth color transition
+    if (currentColor !== targetColor) {
+      const current = new THREE.Color(currentColor);
+      const target = new THREE.Color(targetColor);
+      current.lerp(target, delta * 2);
+      this.companion.mesh.material.color.copy(current);
+    }
+    
+    // Pulsing effect based on state
+    if (this.companion.visualState === 'thinking') {
+      const pulse = Math.sin(Date.now() * 0.005) * 0.3 + 0.7;
+      this.companion.mesh.material.opacity = pulse;
+    } else if (this.companion.visualState === 'talking') {
+      const pulse = Math.sin(Date.now() * 0.01) * 0.2 + 0.8;
+      this.companion.mesh.scale.setScalar(pulse + 0.2);
+    } else {
+      this.companion.mesh.material.opacity = 0.9;
+      this.companion.mesh.scale.setScalar(1.0);
+    }
   }
 
   saveWorldMemory() {
