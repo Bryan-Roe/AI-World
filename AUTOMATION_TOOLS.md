@@ -12,6 +12,7 @@ Complete guide to all automation tools and scripts in your project.
 | **Model Puller** | Download Ollama models | Win/Mac/Linux | `pull-models.bat` or `./pull-models.sh` |
 | **Health Checker** | Service monitoring | Win/Mac/Linux | `health-check.bat` or `./health-check.sh` |
 | **API Examples** | Curl/fetch samples | Unix/Mac/Linux | `./API_EXAMPLES.sh` |
+| **LLM Training Runner** | One-click language model fine-tune | Windows | `./train-language-model.ps1` |
 
 ---
 
@@ -420,6 +421,34 @@ node cli-menu.js
 
 ---
 
+## 7. LLM Training Runner (PowerShell)
+
+**Purpose:** One-click fine-tuning for the enhanced language model  
+**Type:** PowerShell wrapper around `training_runner.py` and `language_model.py`  
+**Launch:** `./train-language-model.ps1`
+
+### Options
+- `-DataFile <path>`: Copy a text/JSONL corpus into `ai_training/language_model/data/train.txt` before training.
+- `-ConfigPath <path>` or `-ConfigJson '<json>'`: Override `language_model.CONFIG` (epochs, learning rate, base_model, etc.).
+- `-Python <path>`: Custom interpreter; defaults to `.venv/Scripts/python.exe` when present.
+- `-SkipVenv`: Force PATH python even if `.venv` exists.
+
+### Example Runs
+```powershell
+# vanilla run (uses existing train.txt or auto-creates sample)
+./train-language-model.ps1
+
+# override epochs and learning rate
+./train-language-model.ps1 -ConfigJson '{"epochs":5,"learning_rate":1e-4}'
+
+# point at custom data file
+./train-language-model.ps1 -DataFile C:\data\my_corpus.txt
+```
+
+Outputs land in `ai_training/language_model/models/run_*` with `metrics.json` alongside the best model.
+
+---
+
 ## Next Steps
 
 1. **Start with CLI Menu:**
@@ -440,7 +469,7 @@ node cli-menu.js
 
 ## Summary
 
-✅ **6 automated tools** covering:
+✅ **7 automated tools** covering:
 - Environment verification
 - Server management
 - API testing

@@ -1,5 +1,5 @@
 """
-🗣️ Language Model Fine-Tuning with PyTorch
+ Language Model Fine-Tuning with PyTorch
 Fine-tune small LLMs on your custom text data with GPU acceleration
 
 USAGE:
@@ -20,7 +20,8 @@ from transformers import (
     TrainingArguments,
     Trainer,
     DataCollatorForLanguageModeling,
-    get_linear_schedule_with_warmup
+    get_linear_schedule_with_warmup,
+    EarlyStoppingCallback
 )
 from datasets import load_dataset, Dataset as HFDataset
 import json
@@ -45,6 +46,14 @@ CONFIG = {
     "lora_r": 16,
     "lora_alpha": 32,
     "lora_dropout": 0.1,
+    # Enhanced training features
+    "use_mixed_precision": True,  # Use mixed precision for faster training
+    "use_gradient_checkpointing": True,  # Save memory at cost of speed
+    "use_cosine_scheduler": True,  # Use cosine annealing learning rate scheduler
+    "use_data_augmentation": True,  # Data augmentation for better generalization
+    "val_split": 0.1,  # Validation split ratio
+    "early_stopping_patience": 3,  # Early stopping patience
+    "lr_scheduler_type": "cosine",  # Learning rate scheduler type
 }
 
 
@@ -101,20 +110,22 @@ class LanguageModelTrainer:
     def __init__(self, config=CONFIG):
         self.config = config
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        print(f"🖥️  Using device: {self.device}")
+        print(f"[*] Using device: {self.device}")
         if self.device.type == "cuda":
             print(f"   GPU: {torch.cuda.get_device_name(0)}")
             print(f"   Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
         
         self.model = None
         self.tokenizer = None
+        self.best_val_loss = float('inf')
+        self.patience_counter = 0
         
         os.makedirs(config["data_dir"], exist_ok=True)
         os.makedirs(config["model_dir"], exist_ok=True)
     
     def setup_model(self):
-        """Load base model and tokenizer"""
-        print(f"\n📥 Loading model: {self.config['base_model']}")
+        """Load base model and tokenizer with optimizations"""
+        print(f"\n[*] Loading model: {self.config['base_model']}")
         
         self.tokenizer = AutoTokenizer.from_pretrained(self.config["base_model"])
         if self.tokenizer.pad_token is None:
@@ -125,6 +136,11 @@ class LanguageModelTrainer:
             torch_dtype=torch.float16 if self.device.type == "cuda" else torch.float32,
             device_map="auto" if self.device.type == "cuda" else None
         )
+        
+        # Enable gradient checkpointing for memory efficiency
+        if self.config["use_gradient_checkpointing"]:
+            self.model.gradient_checkpointing_enable()
+            print(" Gradient checkpointing enabled")
         
         # Apply LoRA if enabled
         if self.config["use_lora"]:
@@ -152,23 +168,66 @@ class LanguageModelTrainer:
             )
             
             self.model = get_peft_model(self.model, lora_config)
-            print("✓ LoRA applied for efficient fine-tuning")
+            print(" LoRA applied for efficient fine-tuning")
         except ImportError:
-            print("⚠️  PEFT not installed. Training full model.")
+            print("  PEFT not installed. Training full model.")
             print("   Install with: pip install peft")
     
     def prepare_data(self):
-        """Load and prepare training data"""
+        """Load and prepare training data with optional augmentation"""
         train_file = os.path.join(self.config["data_dir"], "train.txt")
         
         if not os.path.exists(train_file):
             self._create_sample_data(train_file)
-            return None
+            return None, None
         
-        print(f"\n📊 Loading data from {train_file}")
-        dataset = TextDataset(train_file, self.tokenizer, self.config["max_length"])
-        print(f"   Training examples: {len(dataset)}")
+        print(f"\n Loading data from {train_file}")
+        full_dataset = TextDataset(train_file, self.tokenizer, self.config["max_length"])
         
+        # Apply data augmentation if enabled
+        if self.config["use_data_augmentation"]:
+            print("   Applying data augmentation...")
+            full_dataset = self._augment_dataset(full_dataset)
+        
+        print(f"   Total examples: {len(full_dataset)}")
+        
+        # Split into train/val
+        val_size = int(len(full_dataset) * self.config["val_split"])
+        if val_size == 0 and len(full_dataset) >= 2:
+            val_size = 1
+        train_size = len(full_dataset) - val_size
+        if val_size > 0 and train_size > 0:
+            train_dataset, val_dataset = torch.utils.data.random_split(
+                full_dataset, [train_size, val_size]
+            )
+        else:
+            train_dataset, val_dataset = full_dataset, None
+        
+        print(f"   Training examples: {len(train_dataset)}")
+        print(f"   Validation examples: {0 if val_dataset is None else len(val_dataset)}")
+        
+        return train_dataset, val_dataset
+    
+    def _augment_dataset(self, dataset):
+        """Simple data augmentation: paraphrasing and back-translation simulation"""
+        augmented_examples = []
+        
+        for idx in range(len(dataset)):
+            original = dataset.examples[idx]
+            augmented_examples.append(original)
+            
+            # Simple augmentation: random word swaps
+            words = original.split()
+            if len(words) > 4:
+                import random
+                swapped = words.copy()
+                for _ in range(max(1, len(words) // 10)):
+                    i, j = random.randint(0, len(swapped) - 1), random.randint(0, len(swapped) - 1)
+                    swapped[i], swapped[j] = swapped[j], swapped[i]
+                augmented = ' '.join(swapped)
+                augmented_examples.append(augmented)
+        
+        dataset.examples = augmented_examples
         return dataset
     
     def _create_sample_data(self, file_path):
@@ -201,19 +260,23 @@ The end.
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(sample_text)
         
-        print(f"\n⚠️  No training data found!")
+        print(f"\n  No training data found!")
         print(f"   Created sample file: {file_path}")
         print("   Please edit this file with your own training data and run again!")
     
     def train(self):
-        """Main training function"""
+        """Main training function with early stopping and validation"""
         self.setup_model()
-        dataset = self.prepare_data()
+        train_dataset, val_dataset = self.prepare_data()
         
-        if dataset is None:
+        if train_dataset is None:
             return
         
-        # Training arguments
+        has_val = val_dataset is not None and len(val_dataset) > 0
+        if not has_val:
+            print("  No validation split available; training without eval/early stopping.")
+        
+        # Training arguments with enhancements
         output_dir = os.path.join(
             self.config["model_dir"], 
             f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -223,16 +286,24 @@ The end.
             output_dir=output_dir,
             num_train_epochs=self.config["epochs"],
             per_device_train_batch_size=self.config["batch_size"],
+            per_device_eval_batch_size=self.config["batch_size"],
             gradient_accumulation_steps=self.config["gradient_accumulation_steps"],
             learning_rate=self.config["learning_rate"],
             weight_decay=self.config["weight_decay"],
             warmup_ratio=self.config["warmup_ratio"],
             logging_steps=self.config["logging_steps"],
             save_steps=self.config["save_steps"],
+            eval_steps=self.config["save_steps"],
             save_total_limit=3,
-            fp16=self.device.type == "cuda",
+            fp16=self.config["use_mixed_precision"] and self.device.type == "cuda",
             report_to="none",
-            dataloader_num_workers=0,
+            dataloader_num_workers=2,
+            # Enhanced options
+            lr_scheduler_type=self.config["lr_scheduler_type"],
+            optim="adamw_8bit" if self.device.type == "cuda" else "adamw_torch",
+            load_best_model_at_end=False,
+            # Gradient clipping
+            max_grad_norm=1.0,
         )
         
         # Data collator
@@ -242,17 +313,31 @@ The end.
         )
         
         # Trainer
+        callbacks = []
+        if has_val:
+            from transformers import EarlyStoppingCallback
+            callbacks.append(
+                EarlyStoppingCallback(
+                    early_stopping_patience=self.config["early_stopping_patience"],
+                    early_stopping_threshold=0.0
+                )
+            )
+        
         trainer = Trainer(
             model=self.model,
             args=training_args,
-            train_dataset=dataset,
+            train_dataset=train_dataset,
+            eval_dataset=val_dataset,
             data_collator=data_collator,
+            callbacks=callbacks
         )
         
-        print(f"\n🚀 Starting training...")
+        print(f"\n Starting training with validation...")
         print(f"   Output directory: {output_dir}")
         print(f"   Epochs: {self.config['epochs']}")
         print(f"   Batch size: {self.config['batch_size']} x {self.config['gradient_accumulation_steps']} = {self.config['batch_size'] * self.config['gradient_accumulation_steps']}")
+        print(f"   Learning rate scheduler: {self.config['lr_scheduler_type']}")
+        print(f"   Early stopping patience: {self.config['early_stopping_patience']}")
         print()
         
         trainer.train()
@@ -262,13 +347,30 @@ The end.
         trainer.save_model(final_path)
         self.tokenizer.save_pretrained(final_path)
         
-        print(f"\n✅ Training complete!")
+        # Save training metrics
+        if has_val:
+            metrics = trainer.evaluate()
+        else:
+            # Extract last logged training loss if available
+            last_log = trainer.state.log_history[-1] if trainer.state.log_history else {}
+            metrics = {
+                "eval_loss": None,
+                "train_loss": last_log.get("loss")
+            }
+        with open(os.path.join(final_path, "metrics.json"), 'w') as f:
+            json.dump(metrics, f, indent=2)
+        
+        print(f"\n Training complete!")
         print(f"   Model saved to: {final_path}")
+        if metrics.get("eval_loss") is not None:
+            print(f"   Final evaluation loss: {metrics.get('eval_loss', 'N/A'):.4f}")
+        else:
+            print(f"   Final training loss: {metrics.get('train_loss', 'N/A')}")
     
     def generate(self, prompt, max_new_tokens=100, temperature=0.7, top_p=0.9):
-        """Generate text from a prompt"""
+        """Generate text from a prompt with improved sampling"""
         if self.model is None:
-            print("⚠️  No model loaded!")
+            print("  No model loaded!")
             return None
         
         self.model.eval()
@@ -280,9 +382,15 @@ The end.
                 max_new_tokens=max_new_tokens,
                 temperature=temperature,
                 top_p=top_p,
+                top_k=50,  # Top-K sampling for diversity
                 do_sample=True,
                 pad_token_id=self.tokenizer.pad_token_id,
                 eos_token_id=self.tokenizer.eos_token_id,
+                # Better quality settings
+                repetition_penalty=1.1,  # Reduce repetition
+                length_penalty=1.0,
+                num_return_sequences=1,
+                no_repeat_ngram_size=2,  # Avoid repeating 2-grams
             )
         
         generated = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
@@ -290,7 +398,7 @@ The end.
     
     def load_model(self, model_path):
         """Load a fine-tuned model"""
-        print(f"📂 Loading model from {model_path}")
+        print(f" Loading model from {model_path}")
         self.tokenizer = AutoTokenizer.from_pretrained(model_path)
         self.model = AutoModelForCausalLM.from_pretrained(
             model_path,
@@ -298,15 +406,15 @@ The end.
             device_map="auto" if self.device.type == "cuda" else None
         )
         self.model.eval()
-        print("✓ Model loaded!")
+        print(" Model loaded!")
     
     def interactive_chat(self):
         """Interactive chat with the model"""
         if self.model is None:
-            print("⚠️  No model loaded!")
+            print("  No model loaded!")
             return
         
-        print("\n💬 Interactive Chat (type 'quit' to exit)")
+        print("\n Interactive Chat (type 'quit' to exit)")
         print("-" * 50)
         
         while True:
@@ -316,6 +424,41 @@ The end.
             
             response = self.generate(prompt, max_new_tokens=150)
             print(f"\nAI: {response}")
+    
+    def evaluate_model(self, eval_dataset):
+        """Evaluate model on a dataset and return metrics"""
+        if self.model is None:
+            print("  No model loaded!")
+            return None
+        
+        self.model.eval()
+        total_loss = 0.0
+        num_batches = 0
+        
+        dataloader = DataLoader(eval_dataset, batch_size=self.config["batch_size"])
+        
+        with torch.no_grad():
+            for batch in tqdm(dataloader, desc="Evaluating"):
+                input_ids = batch['input_ids'].to(self.device)
+                attention_mask = batch['attention_mask'].to(self.device)
+                
+                outputs = self.model(
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                    labels=input_ids
+                )
+                
+                total_loss += outputs.loss.item()
+                num_batches += 1
+        
+        avg_loss = total_loss / num_batches
+        perplexity = torch.exp(torch.tensor(avg_loss)).item()
+        
+        print(f"\n Evaluation Results:")
+        print(f"   Average Loss: {avg_loss:.4f}")
+        print(f"   Perplexity: {perplexity:.4f}")
+        
+        return {"loss": avg_loss, "perplexity": perplexity}
 
 
 class SimpleTransformer(nn.Module):
@@ -363,7 +506,7 @@ class SimpleTransformer(nn.Module):
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("🗣️  LANGUAGE MODEL FINE-TUNING")
+    print("  LANGUAGE MODEL FINE-TUNING")
     print("=" * 60)
     
     trainer = LanguageModelTrainer()

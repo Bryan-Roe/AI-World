@@ -44,17 +44,28 @@ CONFIG = {
     "save_steps": 250,
     "logging_steps": 50,
     "num_training_samples": 500,  # Generate synthetic training data
+    # Enhanced features
+    "use_mixed_precision": True,
+    "use_gradient_checkpointing": True,
+    "use_data_augmentation": True,
+    "val_split": 0.1,
+    "early_stopping_patience": 3,
+    "use_lora": True,
+    "lora_r": 16,
+    "lora_alpha": 32,
 }
 
 # World generation templates and components
-TERRAIN_TYPES = ["flat", "hilly", "mountainous", "valley", "plateau", "canyon"]
-BIOMES = ["desert", "forest", "ocean", "arctic", "grassland", "volcanic", "alien"]
-OBJECT_TYPES = ["cube", "sphere", "cylinder", "cone", "torus", "pyramid"]
-STRUCTURES = ["house", "tower", "bridge", "wall", "arch", "pillar"]
+TERRAIN_TYPES = ["flat", "hilly", "mountainous", "valley", "plateau", "canyon", "cliff", "dunes", "swamp"]
+BIOMES = ["desert", "forest", "ocean", "arctic", "grassland", "volcanic", "alien", "cyberpunk", "underwater"]
+OBJECT_TYPES = ["cube", "sphere", "cylinder", "cone", "torus", "pyramid", "octahedron", "tetrahedron"]
+STRUCTURES = ["house", "tower", "bridge", "wall", "arch", "pillar", "statue", "temple", "fortress"]
+VEGETATION = ["tree", "bush", "grass", "flower", "cactus", "coral", "crystal", "mushroom"]
+WEATHER = ["clear", "sunny", "cloudy", "rainy", "snowy", "stormy", "foggy", "misty", "windy"]
 COLORS = {
-    "terrain": ["0x2d5016", "0x8b7355", "0x4a4a4a", "0xf4a460", "0x90ee90"],
-    "objects": ["0xff0000", "0x00ff00", "0x0000ff", "0xffff00", "0xff00ff", "0x00ffff"],
-    "sky": ["0x87ceeb", "0x1a1a2e", "0xff4500", "0x800080", "0x191970"]
+    "terrain": ["0x2d5016", "0x8b7355", "0x4a4a4a", "0xf4a460", "0x90ee90", "0xb0c4de", "0x8fbc8f"],
+    "objects": ["0xff0000", "0x00ff00", "0x0000ff", "0xffff00", "0xff00ff", "0x00ffff", "0xffa500"],
+    "sky": ["0x87ceeb", "0x1a1a2e", "0xff4500", "0x800080", "0x191970", "0x708090", "0xdc143c"]
 }
 
 
@@ -66,24 +77,38 @@ def create_directories():
 
 
 def generate_world_description():
-    """Generate a synthetic world description"""
+    """Generate a synthetic world description with enhanced features"""
     biome = random.choice(BIOMES)
     terrain = random.choice(TERRAIN_TYPES)
+    weather = random.choice(WEATHER)
     
     # Base world properties
     world = {
         "name": f"{biome.capitalize()} {terrain.capitalize()} World",
         "biome": biome,
         "terrain": terrain,
+        "weather": weather,
         "sky_color": random.choice(COLORS["sky"]),
         "fog_density": round(random.uniform(0.001, 0.015), 4),
+        "fog_color": f"0x{random.randint(0xbbbbbb, 0xdddddd):06x}",
         "terrain_objects": [],
         "structures": [],
-        "lights": []
+        "vegetation": [],
+        "lights": [],
+        "atmosphere": {
+            "ambientLight": round(random.uniform(0.3, 0.8), 2),
+            "directionalIntensity": round(random.uniform(0.4, 1.2), 2),
+            "shadowMapSize": random.choice([512, 1024, 2048])
+        },
+        "physics": {
+            "gravity": -9.81,
+            "wind_speed": round(random.uniform(0, 20), 1),
+            "wind_direction": round(random.uniform(0, 360), 1)
+        }
     }
     
     # Generate terrain (ground plane + features)
-    num_terrain_features = random.randint(3, 8)
+    num_terrain_features = random.randint(4, 10)
     for _ in range(num_terrain_features):
         terrain_obj = {
             "type": random.choice(["plane", "cylinder", "sphere"]),
@@ -98,12 +123,14 @@ def generate_world_description():
                 round(random.uniform(10, 50), 2)
             ],
             "color": random.choice(COLORS["terrain"]),
-            "receives_shadow": True
+            "receives_shadow": True,
+            "roughness": round(random.uniform(0.4, 0.9), 2),
+            "metalness": round(random.uniform(0, 0.3), 2)
         }
         world["terrain_objects"].append(terrain_obj)
     
     # Generate structures/objects
-    num_objects = random.randint(5, 15)
+    num_objects = random.randint(6, 18)
     for _ in range(num_objects):
         obj_type = random.choice(OBJECT_TYPES + STRUCTURES)
         obj = {
@@ -120,19 +147,44 @@ def generate_world_description():
             ],
             "color": random.choice(COLORS["objects"]),
             "rotation": round(random.uniform(0, 360), 2),
-            "casts_shadow": True
+            "casts_shadow": True,
+            "roughness": round(random.uniform(0.3, 0.8), 2),
+            "metalness": round(random.uniform(0, 0.6), 2),
+            "emissive": f"0x{random.randint(0, 0x444444):06x}" if random.random() > 0.8 else "0x000000"
         }
         world["structures"].append(obj)
     
-    # Generate lights
-    num_lights = random.randint(2, 5)
-    light_types = ["ambient", "directional", "point", "spot"]
-    for _ in range(num_lights):
+    # Generate vegetation
+    num_vegetation = random.randint(3, 10)
+    for _ in range(num_vegetation):
+        veg = {
+            "type": random.choice(VEGETATION),
+            "position": [
+                round(random.uniform(-75, 75), 2),
+                round(random.uniform(0, 5), 2),
+                round(random.uniform(-75, 75), 2)
+            ],
+            "scale": [
+                round(random.uniform(0.5, 4), 2),
+                round(random.uniform(1, 6), 2),
+                round(random.uniform(0.5, 4), 2)
+            ],
+            "color": random.choice(["0x228b22", "0x32cd32", "0x90ee90", "0x3cb371", "0x2e8b57"]),
+            "animation": random.choice(["sway", "none", "pulse"])
+        }
+        world["vegetation"].append(veg)
+    
+    # Generate lights (improved)
+    num_lights = random.randint(2, 6)
+    light_types = ["ambient", "directional", "point", "spot", "hemisphere"]
+    for i in range(num_lights):
         light_type = random.choice(light_types)
         light = {
             "type": light_type,
             "color": f"0x{random.randint(0xaaaaaa, 0xffffff):06x}",
-            "intensity": round(random.uniform(0.3, 1.5), 2)
+            "intensity": round(random.uniform(0.3, 1.5), 2),
+            "distance": random.choice([0, 100, 200, 300, 500]) if light_type in ["point", "spot"] else 0,
+            "decay": round(random.uniform(1, 2), 2) if light_type in ["point"] else 0
         }
         if light_type in ["point", "spot"]:
             light["position"] = [
@@ -146,6 +198,10 @@ def generate_world_description():
                 round(random.uniform(-1, 0), 2),
                 round(random.uniform(-1, 1), 2)
             ]
+        if light_type == "spot":
+            light["angle"] = round(random.uniform(0.3, 1.5), 2)
+            light["penumbra"] = round(random.uniform(0, 1), 2)
+        
         world["lights"].append(light)
     
     return world
@@ -218,7 +274,7 @@ class WorldDataset(Dataset):
 
 
 def train_world_generator():
-    """Train the world generation model"""
+    """Train the world generation model with enhanced techniques"""
     print("\n🌍 WORLD GENERATOR TRAINING")
     print("=" * 60)
     
@@ -226,6 +282,9 @@ def train_world_generator():
     create_directories()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"💻 Device: {device}")
+    if device.type == "cuda":
+        print(f"   GPU: {torch.cuda.get_device_name(0)}")
+        print(f"   Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
     
     # Generate training data
     training_file = generate_training_data()
@@ -235,13 +294,43 @@ def train_world_generator():
     tokenizer = AutoTokenizer.from_pretrained(CONFIG["base_model"])
     tokenizer.pad_token = tokenizer.eos_token
     
-    model = AutoModelForCausalLM.from_pretrained(CONFIG["base_model"])
-    model.to(device)
+    model = AutoModelForCausalLM.from_pretrained(
+        CONFIG["base_model"],
+        torch_dtype=torch.float16 if device.type == "cuda" else torch.float32,
+        device_map="auto" if device.type == "cuda" else None
+    )
     
-    # Create dataset
-    dataset = WorldDataset(training_file, tokenizer, CONFIG["max_length"])
+    # Apply gradient checkpointing
+    if CONFIG["use_gradient_checkpointing"]:
+        model.gradient_checkpointing_enable()
+        print("✓ Gradient checkpointing enabled")
     
-    # Training arguments
+    # Apply LoRA
+    if CONFIG["use_lora"]:
+        try:
+            from peft import LoraConfig, get_peft_model, TaskType
+            lora_config = LoraConfig(
+                task_type=TaskType.CAUSAL_LM,
+                r=CONFIG["lora_r"],
+                lora_alpha=CONFIG["lora_alpha"],
+                lora_dropout=0.1,
+                target_modules=["c_attn", "c_proj", "c_fc"]
+            )
+            model = get_peft_model(model, lora_config)
+            print("✓ LoRA applied for efficient fine-tuning")
+        except ImportError:
+            print("⚠️  PEFT not installed. Training full model.")
+    
+    # Create dataset with train/val split
+    full_dataset = WorldDataset(training_file, tokenizer, CONFIG["max_length"])
+    val_size = int(len(full_dataset) * CONFIG["val_split"])
+    train_size = len(full_dataset) - val_size
+    train_dataset, val_dataset = torch.utils.data.random_split(
+        full_dataset, [train_size, val_size]
+    )
+    print(f"📊 Train: {len(train_dataset)}, Val: {len(val_dataset)}")
+    
+    # Training arguments with enhancements
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = os.path.join(CONFIG["model_dir"], f"world_gen_{timestamp}")
     
@@ -249,15 +338,23 @@ def train_world_generator():
         output_dir=output_dir,
         num_train_epochs=CONFIG["epochs"],
         per_device_train_batch_size=CONFIG["batch_size"],
+        per_device_eval_batch_size=CONFIG["batch_size"],
         gradient_accumulation_steps=CONFIG["gradient_accumulation_steps"],
         learning_rate=CONFIG["learning_rate"],
         warmup_ratio=CONFIG["warmup_ratio"],
         save_steps=CONFIG["save_steps"],
+        eval_steps=CONFIG["save_steps"],
         logging_steps=CONFIG["logging_steps"],
         save_total_limit=3,
-        fp16=torch.cuda.is_available(),
+        fp16=CONFIG["use_mixed_precision"] and device.type == "cuda",
         report_to="none",
         dataloader_num_workers=0,
+        lr_scheduler_type="cosine",
+        optim="adamw_8bit" if device.type == "cuda" else "adamw_torch",
+        load_best_model_at_end=True,
+        metric_for_best_model="eval_loss",
+        greater_is_better=False,
+        max_grad_norm=1.0,
     )
     
     # Data collator
@@ -266,17 +363,30 @@ def train_world_generator():
         mlm=False
     )
     
+    # Early stopping callback
+    from transformers import EarlyStoppingCallback
+    early_stopping = EarlyStoppingCallback(
+        early_stopping_patience=CONFIG["early_stopping_patience"],
+        early_stopping_threshold=0.0
+    )
+    
     # Trainer
     trainer = Trainer(
         model=model,
         args=training_args,
-        train_dataset=dataset,
+        train_dataset=train_dataset,
+        eval_dataset=val_dataset,
         data_collator=data_collator,
+        callbacks=[early_stopping]
     )
     
     # Train
-    print(f"\n🚀 Starting training for {CONFIG['epochs']} epochs...")
+    print(f"\n🚀 Starting training with enhanced techniques...")
     print(f"📊 Batch size: {CONFIG['batch_size']} × {CONFIG['gradient_accumulation_steps']} = {CONFIG['batch_size'] * CONFIG['gradient_accumulation_steps']}")
+    print(f"   Mixed precision: {CONFIG['use_mixed_precision']}")
+    print(f"   Gradient checkpointing: {CONFIG['use_gradient_checkpointing']}")
+    print(f"   LoRA: {CONFIG['use_lora']}")
+    print()
     
     trainer.train()
     
@@ -285,8 +395,14 @@ def train_world_generator():
     model.save_pretrained(final_model_path)
     tokenizer.save_pretrained(final_model_path)
     
+    # Save metrics
+    metrics = trainer.evaluate()
+    with open(os.path.join(final_model_path, "metrics.json"), 'w') as f:
+        json.dump(metrics, f, indent=2)
+    
     print(f"\n✅ Training complete!")
     print(f"📁 Model saved to: {final_model_path}")
+    print(f"   Final eval loss: {metrics.get('eval_loss', 'N/A'):.4f}")
     
     return model, tokenizer, final_model_path
 
