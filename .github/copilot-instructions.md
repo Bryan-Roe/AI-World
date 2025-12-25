@@ -19,6 +19,12 @@ npm install && npm run dev  # http://localhost:3000
 Invoke-WebRequest http://localhost:3000/health
 Invoke-WebRequest http://localhost:11434/api/tags
 ```
+```bash
+# Docker quick check
+docker-compose up -d
+curl http://localhost:3000/health
+curl http://localhost:11434/api/tags
+```
 
 ## Server API Patterns
 - Inputs validated: `/api/chat{,-stream}` expect `messages: [{role,content}], model`
@@ -28,10 +34,17 @@ Invoke-WebRequest http://localhost:11434/api/tags
 - Streaming: `/api/chat-stream` (Fetch) and `/api/chat-sse` (SSE)
 - Consistent shape: response `{text, raw}`; 429 limit: 30 req/min/IP
 
+### Persona Wrapper (`/api/agent-chat`)
+- Injects `AGENT_PERSONAS[persona]` as a system prompt, then trims history to 12.
+- Input: `{ input: string, history: [{role,content}], persona: 'friendly'|'curious'|'protective', model }`.
+- Proxies internally to `/api/chat` to reuse routing and response shape.
+- Returns `{text, raw}`; use for AI companion/persona-specific interactions.
+
 ## Frontend Conventions
 - Global `messages` with system role; `MAX_HISTORY = 12`
 - Streaming renders chunks; `formatContent()` formats code fences/backticks
 - Model select includes local and cloud options
+- Browser models: UI strips `web-llm:` and shows a loader while `ensureInit()` runs.
 
 ## Python Training Patterns
 - Each file has top-level `CONFIG` and saves checkpoints under `models/`
@@ -43,10 +56,11 @@ Invoke-WebRequest http://localhost:11434/api/tags
 - Demo user exists; test users seeded on startup
 
 ## Project-Specific Tips
-- Use ESM (`type: module`); never expose API keys in client
-- Prefer `os.path.join()` and relative roots in Python
-- Keep training single-script to avoid CUDA memory conflicts
-- New models: add option in `public/index.html`, `ollama pull` locally
+- ESM only (`type: module`); keep secrets server-side.
+- Python paths: use `os.path.join()` with relative roots.
+- Training: run one script at a time to avoid CUDA conflicts.
+- Model config: tweak `DEFAULT_LOCAL_MODEL`, `CLOUD_MODELS`, `CLOUD_DEFAULT_MODEL`, `OLLAMA_URL` near the top of [server.js](server.js).
+- New models: update [public/index.html](public/index.html) select and run `ollama pull <model>`.
 
 ## Quick Tasks
 - Compare models: POST `/api/multi-chat`
@@ -58,6 +72,13 @@ Invoke-WebRequest http://localhost:11434/api/tags
 - Cloud (OpenAI): `gpt-4o-mini`, `gpt-4o`, `gpt-4.1`, `gpt-4.1-mini`, and any `gpt-*` that is not `gpt-oss-*`; requires `OPENAI_API_KEY`.
 - Browser (WebLLM): models prefixed with `web-llm:` (e.g., `web-llm:Llama-3.2-1B-Instruct-q4f16_1-MLC`, `web-llm:Phi-3-mini-4k-instruct-q4f16_1-MLC`) handled client-side via `public/webllm-bridge.js` and `public/game.html`.
 - Defaults: if `model` is omitted, server uses `DEFAULT_LOCAL_MODEL` (config or `gpt-oss-20`). Cloud list is extended via `CLOUD_MODELS` in [server.js](server.js).
+
+### Browser WebLLM Bridge
+- Bridge: [public/webllm-bridge.js](public/webllm-bridge.js) exposes `WebLLMBridge.ensureInit(modelId)`, `chat(messages)`, `streamChat(messages,onDelta)`, `cancel()`.
+- Mapping: UI values like `web-llm:Llama-3.2-1B-Instruct-q4f16_1-MLC` strip the `web-llm:` prefix; `modelId` must match `webllm.prebuiltAppConfig[modelId]`.
+- Usage in UI: [public/app.js](public/app.js) and [public/game.js](public/game.js) detect `model.startsWith('web-llm:')`, split by `:` to pass `modelId` to the bridge.
+- Events: Bridge dispatches `webllm-progress` and `webllm-ready` for loader UX in [public/index.html](public/index.html).
+- Requirement: WebGPU (`navigator.gpu`) must be available; otherwise fallback to local models.
 
 ## Try: Multi-Model Compare
 ```bash
@@ -71,6 +92,11 @@ curl -X POST http://localhost:3000/api/multi-chat \
 ```
 - Response includes: `best` (chosen text), `results` (per-model details with `text`, `provider`, `ms`, `status`), `models`, `aggregator`, `totalMs`.
 - JS (client): send to `/api/multi-chat` and render `results.map(r => r.model + ': ' + r.text)`.
+
+### Aggregators
+- Supported: `length`, `keyword`, `rank-by-model`, `semantic`, `meta-llm`, `voting`.
+- `semantic`: ranks via [semantic_rank.py](semantic_rank.py) subprocess; falls back to `length` on errors.
+- `meta-llm`: uses local judge `gpt-oss-20` (Ollama) to pick the best; falls back to `length` on errors.
 
 ## Key References
 - Server: [server.js](server.js)
