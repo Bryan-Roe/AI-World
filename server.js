@@ -320,7 +320,7 @@ app.get('/auth/profile', authRateLimiter, verifyToken, (req, res) => {
 });
 
 // Update user preferences (protected)
-app.put('/auth/preferences', authLimiter, verifyToken, (req, res) => {
+app.put('/auth/preferences', authRateLimiter, verifyToken, (req, res) => {
   try {
     const { preferences } = req.body;
 
