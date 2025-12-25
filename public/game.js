@@ -9,6 +9,20 @@ class WorldGenerator {
     this.controls = null;
     this.objects = [];
     this.interactableObjects = [];
+    
+    // Interactive object categories for companion
+    this.interactiveObjectTypes = {
+      treasure: { icon: '💎', priority: 'high', actions: ['collect', 'examine'], color: 0xffaa00 },
+      resource: { icon: '🌿', priority: 'medium', actions: ['collect', 'identify'], color: 0x44ff44 },
+      hazard: { icon: '⚠️', priority: 'high', actions: ['avoid', 'warn'], color: 0xff4444 },
+      npc: { icon: '👤', priority: 'medium', actions: ['greet', 'follow'], color: 0x4488ff },
+      tool: { icon: '🔧', priority: 'medium', actions: ['collect', 'use'], color: 0xffff44 },
+      food: { icon: '🍎', priority: 'low', actions: ['collect', 'eat'], color: 0xff8844 },
+      mystery: { icon: '❓', priority: 'high', actions: ['examine', 'investigate'], color: 0xaa44ff },
+      shelter: { icon: '🏠', priority: 'low', actions: ['enter', 'rest'], color: 0x8844ff }
+    };
+    this.companionDetectedObjects = new Map();
+    
     this.lights = [];
     this.shadowBudget = 8; // safety cap to avoid exceeding GPU texture unit limits
     this.raycaster = new THREE.Raycaster();
@@ -590,6 +604,7 @@ class WorldGenerator {
         case 'ShiftLeft': this.isRunning = true; break;
         case 'KeyE': this.interactWithHighlighted(); break;
         case 'KeyF': this.addObjectFromUI(); break;
+        case 'KeyG': this.spawnRandomInteractiveObject(); break;
         case 'KeyQ': this.dropItem(); break;
         case 'Digit1': this.selectSlot(0); break;
         case 'Digit2': this.selectSlot(1); break;
@@ -917,6 +932,25 @@ class WorldGenerator {
     this.createItemInWorld(item, pos.x, pos.z);
   }
 
+  spawnRandomInteractiveObject() {
+    const types = Object.keys(this.interactiveObjectTypes);
+    const randomType = types[Math.floor(Math.random() * types.length)];
+    
+    const pos = this.camera.position.clone();
+    const angle = Math.random() * Math.PI * 2;
+    const distance = 10 + Math.random() * 20;
+    const x = pos.x + Math.cos(angle) * distance;
+    const z = pos.z + Math.sin(angle) * distance;
+    
+    const customData = {
+      name: `${randomType}_${Math.floor(Math.random() * 1000)}`,
+      size: 1.5 + Math.random() * 1.5
+    };
+    
+    this.createInteractiveObject(randomType, x, z, customData);
+    this.setStatus(`Spawned ${randomType} nearby (Press G to spawn more)`, 'success');
+  }
+
   createItemInWorld(item, x, z) {
     const geom = new THREE.BoxGeometry(1.5, 1.5, 1.5);
     const mat = new THREE.MeshStandardMaterial({ color: item.color || 0xffaa00, emissive: item.color || 0xffaa00, emissiveIntensity: 0.3 });
@@ -931,6 +965,55 @@ class WorldGenerator {
     this.scene.add(mesh);
     this.objects.push(mesh);
     this.interactableObjects.push(mesh);
+    return mesh;
+  }
+
+  createInteractiveObject(type, x, z, customData = {}) {
+    const objectType = this.interactiveObjectTypes[type] || this.interactiveObjectTypes.mystery;
+    const size = customData.size || 2;
+    
+    // Create visual representation
+    const geom = type === 'treasure' ? new THREE.OctahedronGeometry(size * 0.7) :
+                 type === 'hazard' ? new THREE.ConeGeometry(size * 0.5, size * 1.5, 8) :
+                 type === 'npc' ? new THREE.CapsuleGeometry(size * 0.4, size * 1.2) :
+                 new THREE.BoxGeometry(size, size, size);
+    
+    const mat = new THREE.MeshStandardMaterial({
+      color: objectType.color,
+      emissive: objectType.color,
+      emissiveIntensity: 0.4,
+      metalness: type === 'treasure' ? 0.8 : 0.3,
+      roughness: type === 'treasure' ? 0.2 : 0.7
+    });
+    
+    const mesh = new THREE.Mesh(geom, mat);
+    mesh.position.set(x, size, z);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    
+    // Add metadata for companion interaction
+    mesh.userData = {
+      type: 'interactive',
+      category: type,
+      priority: objectType.priority,
+      actions: objectType.actions,
+      icon: objectType.icon,
+      detected: false,
+      interactedWith: false,
+      spawnTime: Date.now(),
+      customData: customData,
+      name: customData.name || `${type}_${Date.now()}`
+    };
+    
+    // Add pulsing animation for high priority items
+    if (objectType.priority === 'high') {
+      mesh.userData.pulsePhase = Math.random() * Math.PI * 2;
+    }
+    
+    this.scene.add(mesh);
+    this.objects.push(mesh);
+    this.interactableObjects.push(mesh);
+    
     return mesh;
   }
 
@@ -1187,6 +1270,26 @@ class WorldGenerator {
         const tree = this.createTreeInChunk(baseX + localX, baseZ + localZ, 0x228b22, 12, key);
         if (tree) chunkObjects.push(tree);
       }
+      
+      // Interactive objects for village biome
+      const interactiveVillageCount = 3 + Math.floor(this.random(cx, cz, 460) * 5);
+      for (let i = 0; i < interactiveVillageCount; i++) {
+        const localX = (this.random(cx, cz, i * 48 + 850) - 0.5) * this.chunkSize * 0.85;
+        const localZ = (this.random(cx, cz, i * 48 + 860) - 0.5) * this.chunkSize * 0.85;
+        
+        // Village biome: npc (common), tool (common), shelter (less common)
+        const typeRoll = this.random(cx, cz, i * 48 + 870);
+        let objectType;
+        if (typeRoll < 0.35) objectType = 'npc'; // 35% NPCs
+        else if (typeRoll < 0.70) objectType = 'tool'; // 35% tools
+        else objectType = 'shelter'; // 30% shelter
+        
+        const interactiveObj = this.createInteractiveObject(objectType, baseX + localX, baseZ + localZ);
+        if (interactiveObj) {
+          chunkObjects.push(interactiveObj);
+          this.scene.add(interactiveObj);
+        }
+      }
     } else if (biome === 'plains') {
       // Scattered trees
       const treeCount = 2 + Math.floor(this.random(cx, cz, 550) * 4);
@@ -1197,6 +1300,26 @@ class WorldGenerator {
         if (tree) chunkObjects.push(tree);
       }
       
+      // Interactive objects for plains biome
+      const interactivePlainsCount = 2 + Math.floor(this.random(cx, cz, 560) * 4);
+      for (let i = 0; i < interactivePlainsCount; i++) {
+        const localX = (this.random(cx, cz, i * 42 + 1150) - 0.5) * this.chunkSize * 0.85;
+        const localZ = (this.random(cx, cz, i * 42 + 1160) - 0.5) * this.chunkSize * 0.85;
+        
+        // Plains biome: food (common), resource (common), hazard (rare)
+        const typeRoll = this.random(cx, cz, i * 42 + 1170);
+        let objectType;
+        if (typeRoll < 0.45) objectType = 'food'; // 45% food
+        else if (typeRoll < 0.85) objectType = 'resource'; // 40% resource
+        else objectType = 'hazard'; // 15% hazard
+        
+        const interactiveObj = this.createInteractiveObject(objectType, baseX + localX, baseZ + localZ);
+        if (interactiveObj) {
+          chunkObjects.push(interactiveObj);
+          this.scene.add(interactiveObj);
+        }
+      }
+      
       // Rocks
       const rockCount = 3 + Math.floor(this.random(cx, cz, 600) * 6);
       for (let i = 0; i < rockCount; i++) {
@@ -1204,6 +1327,26 @@ class WorldGenerator {
         const localZ = (this.random(cx, cz, i * 40 + 1300) - 0.5) * this.chunkSize * 0.9;
         const rock = this.createRockInChunk(baseX + localX, baseZ + localZ, 0x696969, key);
         if (rock) chunkObjects.push(rock);
+      }
+      
+      // Interactive objects for forest biome
+      const interactiveCount = 2 + Math.floor(this.random(cx, cz, 610) * 4);
+      for (let i = 0; i < interactiveCount; i++) {
+        const localX = (this.random(cx, cz, i * 45 + 1350) - 0.5) * this.chunkSize * 0.85;
+        const localZ = (this.random(cx, cz, i * 45 + 1360) - 0.5) * this.chunkSize * 0.85;
+        
+        // Forest biome: treasure (rare), resource (common), mystery
+        const typeRoll = this.random(cx, cz, i * 45 + 1370);
+        let objectType;
+        if (typeRoll < 0.15) objectType = 'treasure'; // 15% treasure
+        else if (typeRoll < 0.60) objectType = 'resource'; // 45% resource
+        else objectType = 'mystery'; // 40% mystery
+        
+        const interactiveObj = this.createInteractiveObject(objectType, baseX + localX, baseZ + localZ);
+        if (interactiveObj) {
+          chunkObjects.push(interactiveObj);
+          this.scene.add(interactiveObj);
+        }
       }
     } else if (biome === 'meadow') {
       // Flowers and light vegetation
@@ -1223,6 +1366,26 @@ class WorldGenerator {
         const localZ = (this.random(cx, cz, i * 50 + 1800) - 0.5) * this.chunkSize * 0.9;
         const tree = this.createTreeInChunk(baseX + localX, baseZ + localZ, 0x228b22, 11, key);
         if (tree) chunkObjects.push(tree);
+      }
+      
+      // Interactive objects for meadow biome
+      const interactiveMeadowCount = 2 + Math.floor(this.random(cx, cz, 710) * 4);
+      for (let i = 0; i < interactiveMeadowCount; i++) {
+        const localX = (this.random(cx, cz, i * 52 + 1850) - 0.5) * this.chunkSize * 0.85;
+        const localZ = (this.random(cx, cz, i * 52 + 1860) - 0.5) * this.chunkSize * 0.85;
+        
+        // Meadow biome: food (common), resource (common), hazard (rare)
+        const typeRoll = this.random(cx, cz, i * 52 + 1870);
+        let objectType;
+        if (typeRoll < 0.45) objectType = 'food'; // 45% food
+        else if (typeRoll < 0.85) objectType = 'resource'; // 40% resource
+        else objectType = 'hazard'; // 15% hazard
+        
+        const interactiveObj = this.createInteractiveObject(objectType, baseX + localX, baseZ + localZ);
+        if (interactiveObj) {
+          chunkObjects.push(interactiveObj);
+          this.scene.add(interactiveObj);
+        }
       }
     } else { // mystical - rare magical biome
       // Glowing crystals
@@ -3403,6 +3566,116 @@ Rules:
     } else {
       this.companion.mesh.material.opacity = 0.9;
       this.companion.mesh.scale.setScalar(1.0);
+    }
+    
+    // Detect nearby interactive objects
+    this.detectCompanionInteractiveObjects();
+  }
+
+  detectCompanionInteractiveObjects() {
+    if (!this.companion.active || !this.companion.mesh) return;
+    
+    const companionPos = this.companion.mesh.position;
+    const detectionRadius = 25; // Detection range
+    
+    // Scan for interactive objects
+    for (const obj of this.interactableObjects) {
+      if (!obj.userData || obj.userData.type !== 'interactive') continue;
+      if (obj === this.companion.mesh) continue;
+      
+      const dist = companionPos.distanceTo(obj.position);
+      
+      if (dist < detectionRadius) {
+        const objId = obj.userData.name;
+        
+        if (!this.companionDetectedObjects.has(objId)) {
+          // New object detected
+          this.companionDetectedObjects.set(objId, {
+            object: obj,
+            firstDetected: Date.now(),
+            distance: dist,
+            announced: false
+          });
+          
+          // Announce detection based on priority
+          if (obj.userData.priority === 'high' && !obj.userData.interactedWith) {
+            this.announceObjectDetection(obj);
+          }
+        } else {
+          // Update distance
+          const detected = this.companionDetectedObjects.get(objId);
+          detected.distance = dist;
+          
+          // Announce if we're getting close and haven't announced yet
+          if (!detected.announced && dist < 10 && obj.userData.priority !== 'low') {
+            this.announceObjectDetection(obj);
+            detected.announced = true;
+          }
+        }
+        
+        // Add visual highlight for detected objects
+        this.highlightDetectedObject(obj, dist);
+      } else {
+        // Object out of range, remove from detected
+        const objId = obj.userData.name;
+        if (this.companionDetectedObjects.has(objId)) {
+          this.companionDetectedObjects.delete(objId);
+          this.removeObjectHighlight(obj);
+        }
+      }
+    }
+  }
+
+  announceObjectDetection(obj) {
+    const category = obj.userData.category;
+    const objType = this.interactiveObjectTypes[category];
+    
+    const messages = {
+      treasure: ['Found treasure!', 'Valuable item ahead!', 'Shiny thing detected!'],
+      resource: ['Resource spotted', 'Found materials', 'Useful item nearby'],
+      hazard: ['Danger ahead!', 'Watch out!', 'Something dangerous!'],
+      npc: ['Someone nearby', 'Found a person', 'NPC detected'],
+      tool: ['Tool found!', 'Equipment spotted', 'Useful tool here'],
+      food: ['Food available', 'Found something edible', 'Snack nearby'],
+      mystery: ['Strange object...', 'What is this?', 'Mysterious item!'],
+      shelter: ['Shelter found', 'Safe place ahead', 'Building nearby']
+    };
+    
+    const messageList = messages[category] || ['Found something'];
+    const message = messageList[Math.floor(Math.random() * messageList.length)];
+    
+    this.setCompanionMessage(`${objType.icon} ${message}`);
+    
+    // Add to memory with high priority
+    this.companion.memory.push({
+      time: Date.now(),
+      event: `detected ${category}: ${obj.userData.customData.name || category}`,
+      action: 'detect',
+      priority: obj.userData.priority,
+      emotion: category === 'hazard' ? 'alert' : category === 'treasure' ? 'happy' : 'curious'
+    });
+    
+    // Speak if voice enabled
+    if (this.companion.voiceEnabled) {
+      this.speakCompanionMessage(message);
+    }
+  }
+
+  highlightDetectedObject(obj, distance) {
+    // Add subtle highlight effect
+    if (!obj.userData.originalEmissiveIntensity) {
+      obj.userData.originalEmissiveIntensity = obj.material.emissiveIntensity;
+    }
+    
+    // Pulse based on distance (closer = faster pulse)
+    const pulseSpeed = Math.max(0.002, 0.01 / (distance + 1));
+    const pulse = Math.sin(Date.now() * pulseSpeed + (obj.userData.pulsePhase || 0)) * 0.2 + 0.6;
+    obj.material.emissiveIntensity = pulse;
+  }
+
+  removeObjectHighlight(obj) {
+    if (obj.userData.originalEmissiveIntensity !== undefined) {
+      obj.material.emissiveIntensity = obj.userData.originalEmissiveIntensity;
     }
   }
 

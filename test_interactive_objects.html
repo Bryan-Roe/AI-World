@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Interactive Objects Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 1000px;
+      margin: 20px auto;
+      padding: 20px;
+      background: #1a1a2e;
+      color: #eee;
+    }
+    h1 { color: #60a5fa; }
+    .test-section {
+      background: #16213e;
+      border: 1px solid #0f3460;
+      border-radius: 8px;
+      padding: 15px;
+      margin: 15px 0;
+    }
+    .object-type {
+      display: inline-block;
+      background: #0f3460;
+      padding: 8px 12px;
+      margin: 5px;
+      border-radius: 5px;
+      border-left: 4px solid;
+    }
+    .treasure { border-color: #ffd700; }
+    .resource { border-color: #8b4513; }
+    .hazard { border-color: #ff4444; }
+    .npc { border-color: #4CAF50; }
+    .tool { border-color: #9e9e9e; }
+    .food { border-color: #ff9800; }
+    .mystery { border-color: #9c27b0; }
+    .shelter { border-color: #2196F3; }
+    .status {
+      padding: 10px;
+      margin: 10px 0;
+      border-radius: 5px;
+      background: #0f3460;
+    }
+    .success { border-left: 4px solid #4CAF50; }
+    .info { border-left: 4px solid #2196F3; }
+    button {
+      background: #60a5fa;
+      color: #fff;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 5px;
+      cursor: pointer;
+      margin: 5px;
+      font-size: 14px;
+    }
+    button:hover { background: #3b82f6; }
+    code {
+      background: #0a0a0a;
+      padding: 2px 6px;
+      border-radius: 3px;
+      color: #60a5fa;
+    }
+  </style>
+</head>
+<body>
+  <h1>🎮 Interactive Objects Test</h1>
+  
+  <div class="test-section">
+    <h2>📦 Object Types</h2>
+    <p>The game now includes 8 types of interactive objects that companions can detect:</p>
+    <div class="object-type treasure">💎 Treasure (High Priority)</div>
+    <div class="object-type hazard">⚠️ Hazard (High Priority)</div>
+    <div class="object-type resource">⛏️ Resource (Medium Priority)</div>
+    <div class="object-type tool">🔧 Tool (Medium Priority)</div>
+    <div class="object-type npc">👤 NPC (Medium Priority)</div>
+    <div class="object-type food">🍖 Food (Low Priority)</div>
+    <div class="object-type mystery">❓ Mystery (Medium Priority)</div>
+    <div class="object-type shelter">🏠 Shelter (Medium Priority)</div>
+  </div>
+
+  <div class="test-section">
+    <h2>🗺️ Biome Distribution</h2>
+    <p><strong>Forest:</strong> 2-6 objects per chunk (Treasure 15%, Resource 45%, Mystery 40%)</p>
+    <p><strong>Village:</strong> 3-8 objects per chunk (NPC 35%, Tool 35%, Shelter 30%)</p>
+    <p><strong>Plains:</strong> 2-6 objects per chunk (Food 45%, Resource 40%, Hazard 15%)</p>
+    <p><strong>Meadow:</strong> 2-6 objects per chunk (Food 45%, Resource 40%, Hazard 15%)</p>
+  </div>
+
+  <div class="test-section">
+    <h2>🤖 Companion Detection System</h2>
+    <ul>
+      <li><strong>Detection Radius:</strong> 25 units</li>
+      <li><strong>Announcement Triggers:</strong>
+        <ul>
+          <li>High priority (treasure/hazard): Announces immediately when detected</li>
+          <li>Medium/Low priority: Announces when within 10 units</li>
+        </ul>
+      </li>
+      <li><strong>Visual Feedback:</strong> Objects pulse with distance-based intensity</li>
+      <li><strong>Voice Synthesis:</strong> Companion speaks detection messages</li>
+      <li><strong>Memory Storage:</strong> Detected objects stored in companion memory</li>
+    </ul>
+  </div>
+
+  <div class="test-section">
+    <h2>🎮 Testing Instructions</h2>
+    <ol>
+      <li>Start the server: <code>npm run dev</code></li>
+      <li>Open game: <code>http://localhost:3000/game.html</code></li>
+      <li>Press <code>Tab</code> to spawn companion</li>
+      <li>Press <code>G</code> to manually spawn test objects nearby</li>
+      <li>Walk around to let companion discover objects naturally in chunks</li>
+      <li>Watch the companion log for detection messages</li>
+      <li>Listen for voice synthesis announcements</li>
+      <li>Observe pulsing objects when companion is nearby</li>
+    </ol>
+  </div>
+
+  <div class="test-section">
+    <h2>🔧 Testing Controls</h2>
+    <button onclick="copyToClipboard('http://localhost:3000/game.html')">📋 Copy Game URL</button>
+    <button onclick="window.open('http://localhost:3000/game.html', '_blank')">🚀 Launch Game</button>
+    <button onclick="showServerCommands()">💻 Show Server Commands</button>
+  </div>
+
+  <div id="serverCommands" class="status info" style="display:none;">
+    <h3>Server Commands:</h3>
+    <pre><code>cd c:\Users\Bryan\OneDrive\App
+npm run dev</code></pre>
+    <p>Then open: <code>http://localhost:3000/game.html</code></p>
+  </div>
+
+  <div class="test-section">
+    <h2>✅ Implementation Checklist</h2>
+    <div class="status success">✅ Interactive object type definitions (8 categories)</div>
+    <div class="status success">✅ createInteractiveObject() method with geometry/materials</div>
+    <div class="status success">✅ spawnRandomInteractiveObject() method for manual testing (G key)</div>
+    <div class="status success">✅ World generation integration (all biomes)</div>
+    <div class="status success">✅ Companion detection system (25-unit radius)</div>
+    <div class="status success">✅ Announcement system (voice + text)</div>
+    <div class="status success">✅ Visual feedback (pulsing highlights)</div>
+    <div class="status success">✅ Memory storage (companionDetectedObjects Map)</div>
+  </div>
+
+  <div class="test-section">
+    <h2>📊 Expected Results</h2>
+    <ul>
+      <li>Objects spawn automatically in each generated chunk</li>
+      <li>Objects appear as colored 3D shapes (spheres, boxes, pyramids)</li>
+      <li>Companion detects objects within 25 units</li>
+      <li>High-priority objects trigger immediate announcements</li>
+      <li>Medium/low priority trigger announcements within 10 units</li>
+      <li>Objects pulse when companion is nearby</li>
+      <li>Voice synthesis speaks detection messages</li>
+      <li>Companion log displays detection text</li>
+      <li>Objects persist in memory for future reference</li>
+    </ul>
+  </div>
+
+  <script>
+    function copyToClipboard(text) {
+      navigator.clipboard.writeText(text).then(() => {
+        alert('Copied to clipboard: ' + text);
+      });
+    }
+
+    function showServerCommands() {
+      const div = document.getElementById('serverCommands');
+      div.style.display = div.style.display === 'none' ? 'block' : 'none';
+    }
+  </script>
+</body>
+</html>
