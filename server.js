@@ -56,7 +56,7 @@ const CHAT_MAX_HISTORY = Number(CFG?.chat?.max_history || 12);
 if (CFG?.server?.trust_proxy === true) {
   app.set('trust proxy', 1);
 }
-const DATA_DIR = path.join(process.cwd(), 'ai_training', 'language_model', 'data');
+const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), 'ai_training', 'language_model', 'data');
 const AGENT_PERSONAS = {
   friendly: 'You are a warm, concise guide. Keep answers short, friendly, and actionable.',
   coder: 'You are a focused coding assistant. Return concise answers, bullet steps, and minimal prose. Show code blocks when helpful.',
@@ -71,7 +71,8 @@ if (!OPENAI_API_KEY) {
 console.log(`Using OLLAMA_URL: ${OLLAMA_URL}`);
 
 // Check Ollama availability at startup
-(async () => {
+if (process.env.NODE_ENV !== 'test') {
+  (async () => {
   try {
     const resp = await fetch(`${OLLAMA_URL}/api/tags`, { timeout: 3000 });
     if (resp.ok) {
@@ -86,7 +87,8 @@ console.log(`Using OLLAMA_URL: ${OLLAMA_URL}`);
     console.warn(`   To start Ollama: ollama serve`);
     console.warn(`   To pull a model: ollama pull gpt-oss-20`);
   }
-})();
+  })();
+}
 
 app.use(morgan(MORGAN_FORMAT));
 app.use(express.json({ limit: JSON_LIMIT }));
@@ -105,7 +107,7 @@ app.use((req, res, next) => {
 
 // Simple rate limiting per IP (configurable requests per minute)
 const rateLimitMap = new Map();
-const RATE_LIMIT = Number(CFG?.server?.rate_limit_per_minute || 30);
+const RATE_LIMIT = Number(process.env.RATE_LIMIT_PER_MINUTE || CFG?.server?.rate_limit_per_minute || 30);
 const RATE_WINDOW = 60000; // 1 minute
 
 app.use((req, res, next) => {
@@ -1136,8 +1138,12 @@ except Exception as e:
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-  console.log('API docs: http://localhost:${PORT} (open in browser)');
-  console.log('API reference: See API.md in project root');
-});
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+    console.log('API docs: http://localhost:${PORT} (open in browser)');
+    console.log('API reference: See API.md in project root');
+  });
+}
+
+export { app, rateLimitMap };
