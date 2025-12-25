@@ -118,8 +118,13 @@ class WorldGenerator {
     this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
     this.camera.position.set(0, this.playerHeight, 30);
 
-    // Renderer
+    // Renderer - must be created before anything tries to render
     this.createRenderer();
+    
+    if (!this.renderer) {
+      console.error('Failed to initialize renderer - world will not display');
+      return;
+    }
 
     // Initialize enhanced world system (dynamic lighting, particles, biomes)
     import('./vendor/EnhancedWorld.js').then(module => {
@@ -210,30 +215,47 @@ class WorldGenerator {
   createRenderer() {
     // Clean up any existing canvas
     const container = document.getElementById('game-container');
-    if (!container) return;
+    if (!container) {
+      console.error('game-container element not found!');
+      return;
+    }
+    
     if (this.renderer && this.renderer.domElement && this.renderer.domElement.parentNode === container) {
       container.removeChild(this.renderer.domElement);
       this.renderer.dispose();
     }
 
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setPixelRatio(window.devicePixelRatio);
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    container.appendChild(this.renderer.domElement);
+    try {
+      this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+      this.renderer.setSize(window.innerWidth, window.innerHeight);
+      this.renderer.setPixelRatio(window.devicePixelRatio);
+      this.renderer.shadowMap.enabled = true;
+      this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      container.appendChild(this.renderer.domElement);
+      
+      console.log('✓ Renderer created successfully');
 
-    // Handle WebGL context loss
-    const canvas = this.renderer.domElement;
-    canvas.addEventListener('webglcontextlost', (event) => {
-      event.preventDefault();
-      this.setStatus('WebGL context lost. Click Reconnect.', 'error');
-    });
+      // Handle WebGL context loss
+      const canvas = this.renderer.domElement;
+      canvas.addEventListener('webglcontextlost', (event) => {
+        event.preventDefault();
+        this.setStatus('WebGL context lost. Click Reconnect.', 'error');
+      });
 
-    canvas.addEventListener('webglcontextrestored', () => {
-      this.setStatus('Context restored. Rendering...', 'success');
-      this.reconnectRenderer();
-    });
+      canvas.addEventListener('webglcontextrestored', () => {
+        this.setStatus('Context restored. Rendering...', 'success');
+        this.reconnectRenderer();
+      });
+    } catch (err) {
+      console.error('Failed to create WebGL renderer:', err);
+      this.setStatus('WebGL initialization failed: ' + err.message, 'error');
+      // Try to display error to user
+      container.innerHTML = `<div style="color: #f87171; padding: 20px; text-align: center;">
+        <h2>WebGL Error</h2>
+        <p>${err.message}</p>
+        <p>Your browser may not support WebGL, or it may be disabled.</p>
+      </div>`;
+    }
   }
 
   reconnectRenderer() {
@@ -3290,6 +3312,11 @@ Rules:
   animate() {
     requestAnimationFrame(() => this.animate());
     
+    // Safety check: ensure renderer exists
+    if (!this.renderer || !this.scene || !this.camera) {
+      return;
+    }
+    
     const time = performance.now();
     const delta = (time - this.prevTime) / 1000;
     
@@ -3408,27 +3435,50 @@ Rules:
     this.updatePlayerUI();
     
     this.prevTime = time;
-    this.renderer.render(this.scene, this.camera);
+    
+    // Final safety check before rendering
+    if (this.renderer && this.scene && this.camera) {
+      try {
+        this.renderer.render(this.scene, this.camera);
+      } catch (err) {
+        console.error('Render error:', err);
+        this.setStatus('Render failed: ' + err.message, 'error');
+      }
+    }
   }
 }
 
 // Initialize the game
 window.addEventListener('load', () => {
-  window.game = new WorldGenerator();
+  console.log('🎮 Initializing World Generator...');
   
-  // Start auto-save
-  window.game.startAutoSave(30);
-  
-  // Create memory stats display
-  const statsDiv = document.createElement('div');
-  statsDiv.id = 'memory-stats';
-  document.body.appendChild(statsDiv);
-  window.game.displayMemoryStats();
-  
-  // Update stats periodically
-  setInterval(() => {
+  try {
+    window.game = new WorldGenerator();
+    console.log('✓ World Generator initialized');
+    
+    // Start auto-save
+    window.game.startAutoSave(30);
+    
+    // Create memory stats display
+    const statsDiv = document.createElement('div');
+    statsDiv.id = 'memory-stats';
+    document.body.appendChild(statsDiv);
     window.game.displayMemoryStats();
-  }, 5000);
+    
+    // Update stats periodically
+    setInterval(() => {
+      window.game.displayMemoryStats();
+    }, 5000);
+    
+    console.log('✓ Game fully initialized and running');
+  } catch (err) {
+    console.error('❌ Failed to initialize game:', err);
+    const statusEl = document.getElementById('status');
+    if (statusEl) {
+      statusEl.textContent = 'Initialization failed: ' + err.message;
+      statusEl.className = 'error';
+    }
+  }
 });
 
 // Save on page unload
