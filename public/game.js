@@ -181,6 +181,7 @@ class WorldGenerator {
       this.camera.aspect = window.innerWidth / window.innerHeight;
       this.camera.updateProjectionMatrix();
       this.renderer.setSize(window.innerWidth, window.innerHeight);
+      this.resizePostFX();
     });
   }
 
@@ -313,6 +314,7 @@ class WorldGenerator {
     }
     this.createSkyDome();
     this.updateEnvironmentMap(this._skyTopColor, this._skyBottomColor, true);
+    this.initPostFX();
   }
 
   createSkyDome() {
@@ -407,6 +409,139 @@ class WorldGenerator {
     this.skyUniforms.topColor.value.copy(this._skyTopColor);
     this.skyUniforms.bottomColor.value.copy(this._skyBottomColor);
     this.updateEnvironmentMap(this._skyTopColor, this._skyBottomColor);
+  }
+
+  initPostFX() {
+    if (!this.renderer || !this.scene || !this.camera) return;
+    if (!this.postFXEnabled) {
+      this.postFX = null;
+      return;
+    }
+    if (!window.THREE || !THREE.EffectComposer || !THREE.RenderPass || !THREE.ShaderPass || !THREE.CopyShader) {
+      this.postFX = null;
+      return;
+    }
+
+    if (this.postFX && this.postFX.renderer === this.renderer) {
+      this.resizePostFX();
+      return;
+    }
+
+    if (this.postFX && this.postFX.composer) {
+      const oldComposer = this.postFX.composer;
+      if (oldComposer.renderTarget1) oldComposer.renderTarget1.dispose();
+      if (oldComposer.renderTarget2) oldComposer.renderTarget2.dispose();
+      if (this.postFX.bloomPass && this.postFX.bloomPass.dispose) {
+        this.postFX.bloomPass.dispose();
+      }
+      if (this.postFX.bokehPass && this.postFX.bokehPass.renderTargetDepth) {
+        this.postFX.bokehPass.renderTargetDepth.dispose();
+      }
+    }
+
+    const composer = new THREE.EffectComposer(this.renderer);
+    const pixelRatio = this.renderer.getPixelRatio ? this.renderer.getPixelRatio() : Math.min(window.devicePixelRatio || 1, 2);
+    if (composer.setPixelRatio) {
+      composer.setPixelRatio(pixelRatio);
+    }
+    composer.setSize(window.innerWidth, window.innerHeight);
+
+    const renderPass = new THREE.RenderPass(this.scene, this.camera);
+    composer.addPass(renderPass);
+
+    let bloomPass = null;
+    if (THREE.UnrealBloomPass && THREE.LuminosityHighPassShader) {
+      bloomPass = new THREE.UnrealBloomPass(
+        new THREE.Vector2(window.innerWidth, window.innerHeight),
+        1.15,
+        0.55,
+        0.18
+      );
+      bloomPass.strength = 1.15;
+      bloomPass.radius = 0.55;
+      bloomPass.threshold = 0.18;
+      composer.addPass(bloomPass);
+    }
+
+    let bokehPass = null;
+    if (THREE.BokehPass && THREE.BokehShader) {
+      bokehPass = new THREE.BokehPass(this.scene, this.camera, {
+        focus: this.focusDistance,
+        aperture: 0.045,
+        maxblur: 1.2,
+        width: Math.floor(window.innerWidth * pixelRatio),
+        height: Math.floor(window.innerHeight * pixelRatio)
+      });
+      composer.addPass(bokehPass);
+    }
+
+    this.postFX = { composer, bloomPass, bokehPass, renderer: this.renderer };
+    this.resizePostFX();
+  }
+
+  resizePostFX() {
+    if (!this.postFX || !this.postFX.composer || !this.renderer) return;
+    const composer = this.postFX.composer;
+    const pixelRatio = this.renderer.getPixelRatio ? this.renderer.getPixelRatio() : Math.min(window.devicePixelRatio || 1, 2);
+    if (composer.setPixelRatio) {
+      composer.setPixelRatio(pixelRatio);
+    }
+    composer.setSize(window.innerWidth, window.innerHeight);
+
+    const bokehPass = this.postFX.bokehPass;
+    if (bokehPass) {
+      if (bokehPass.uniforms && bokehPass.uniforms.aspect) {
+        bokehPass.uniforms.aspect.value = this.camera.aspect;
+      } else if (bokehPass.materialBokeh && bokehPass.materialBokeh.uniforms && bokehPass.materialBokeh.uniforms.aspect) {
+        bokehPass.materialBokeh.uniforms.aspect.value = this.camera.aspect;
+      }
+      if (bokehPass.renderTargetDepth) {
+        bokehPass.renderTargetDepth.setSize(
+          Math.floor(window.innerWidth * pixelRatio),
+          Math.floor(window.innerHeight * pixelRatio)
+        );
+      }
+    }
+  }
+
+  updatePostFXFocus(delta) {
+    if (!this.postFXEnabled || !this.postFX || !this.postFX.bokehPass || !this.camera) return;
+    const bokehPass = this.postFX.bokehPass;
+
+    this.raycaster.setFromCamera(this._centerVec2, this.camera);
+    let targetDistance = this.focusDistance;
+    let hit = null;
+
+    const hits = this.raycaster.intersectObjects(this.interactableObjects, true);
+    if (hits.length) {
+      hit = hits[0];
+    } else if (this.ground) {
+      const groundHits = this.raycaster.intersectObject(this.ground, true);
+      if (groundHits.length) {
+        hit = groundHits[0];
+      }
+    }
+
+    if (hit) {
+      targetDistance = hit.distance;
+    }
+
+    const smoothing = Math.min(1, delta * 6);
+    this.focusDistance += (targetDistance - this.focusDistance) * smoothing;
+
+    if (bokehPass.uniforms && bokehPass.uniforms.focus) {
+      bokehPass.uniforms.focus.value = this.focusDistance;
+    } else if (bokehPass.materialBokeh && bokehPass.materialBokeh.uniforms && bokehPass.materialBokeh.uniforms.focus) {
+      bokehPass.materialBokeh.uniforms.focus.value = this.focusDistance;
+    }
+  }
+
+  renderScene(delta) {
+    if (this.postFXEnabled && this.postFX && this.postFX.composer) {
+      this.postFX.composer.render(delta);
+    } else if (this.renderer && this.scene && this.camera) {
+      this.renderer.render(this.scene, this.camera);
+    }
   }
 
   reconnectRenderer() {
@@ -3667,7 +3802,8 @@ Rules:
     // Final safety check before rendering
     if (this.renderer && this.scene && this.camera) {
       try {
-        this.renderer.render(this.scene, this.camera);
+        this.updatePostFXFocus(delta);
+        this.renderScene(delta);
       } catch (err) {
         console.error('Render error:', err);
         this.setStatus('Render failed: ' + err.message, 'error');

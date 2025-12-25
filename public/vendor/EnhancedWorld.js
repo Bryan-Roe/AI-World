@@ -293,7 +293,8 @@ export class EnhancedWorld {
     this.lighting.initialize();
 
     // Try to setup post-processing if available
-    if (window.THREE && window.THREE.EffectComposer) {
+    const worldHasPostFX = this.world && this.world.postFX && this.world.postFX.composer;
+    if (!worldHasPostFX && window.THREE && window.THREE.EffectComposer) {
       this.postProcessing = new PostProcessing(
         this.world.renderer,
         this.world.scene,
@@ -326,7 +327,8 @@ export class EnhancedWorld {
     this.lighting.update(delta);
     this.particles.update(delta);
 
-    if (this.postProcessing) {
+    const worldHasPostFX = this.world && this.world.postFX && this.world.postFX.composer;
+    if (this.postProcessing && !worldHasPostFX) {
       this.postProcessing.render();
     }
   }
