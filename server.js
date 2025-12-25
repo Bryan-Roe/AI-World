@@ -20,6 +20,17 @@ import {
 
 dotenv.config();
 
+// Rate limiter for login attempts
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 login requests per windowMs
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  message: {
+    error: 'Too many login attempts from this IP, please try again later.'
+  }
+});
+
 // Limit expensive world generation requests to mitigate DoS risk
 const worldGenerationLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
@@ -263,7 +274,7 @@ app.post('/auth/register', async (req, res) => {
 });
 
 // Login user
-app.post('/auth/login', async (req, res) => {
+app.post('/auth/login', loginLimiter, async (req, res) => {
   try {
     const { username, password } = req.body;
 
