@@ -24,6 +24,7 @@ Invoke-WebRequest http://localhost:11434/api/tags
 - Inputs validated: `/api/chat{,-stream}` expect `messages: [{role,content}], model`
 - History trimmed: system + last 12 messages (mirrored in `public/app.js`)
 - Model routing: local default `gpt-oss-20`; `gpt-4o(-mini)` -> OpenAI
+- Routing rules: any `gpt-oss-*` → Ollama; any `gpt-*` not `gpt-oss-*` or listed in `CLOUD_MODELS` → OpenAI. Configure `DEFAULT_LOCAL_MODEL`, `CLOUD_MODELS` in [server.js](server.js).
 - Streaming: `/api/chat-stream` (Fetch) and `/api/chat-sse` (SSE)
 - Consistent shape: response `{text, raw}`; 429 limit: 30 req/min/IP
 
@@ -57,6 +58,19 @@ Invoke-WebRequest http://localhost:11434/api/tags
 - Cloud (OpenAI): `gpt-4o-mini`, `gpt-4o`, `gpt-4.1`, `gpt-4.1-mini`, and any `gpt-*` that is not `gpt-oss-*`; requires `OPENAI_API_KEY`.
 - Browser (WebLLM): models prefixed with `web-llm:` (e.g., `web-llm:Llama-3.2-1B-Instruct-q4f16_1-MLC`, `web-llm:Phi-3-mini-4k-instruct-q4f16_1-MLC`) handled client-side via `public/webllm-bridge.js` and `public/game.html`.
 - Defaults: if `model` is omitted, server uses `DEFAULT_LOCAL_MODEL` (config or `gpt-oss-20`). Cloud list is extended via `CLOUD_MODELS` in [server.js](server.js).
+
+## Try: Multi-Model Compare
+```bash
+curl -X POST http://localhost:3000/api/multi-chat \
+	-H "Content-Type: application/json" \
+	-d '{
+		"messages": [{"role":"user","content":"Summarize this project"}],
+		"models": ["gpt-oss-20","llama3.2","gpt-4o-mini"],
+		"aggregator": "length"
+	}'
+```
+- Response includes: `best` (chosen text), `results` (per-model details with `text`, `provider`, `ms`, `status`), `models`, `aggregator`, `totalMs`.
+- JS (client): send to `/api/multi-chat` and render `results.map(r => r.model + ': ' + r.text)`.
 
 ## Key References
 - Server: [server.js](server.js)
