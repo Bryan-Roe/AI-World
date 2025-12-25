@@ -8,6 +8,7 @@ const transportEl = document.getElementById('streamTransport');
 const clearBtn = document.getElementById('clearChat');
 const emptyState = document.getElementById('emptyState');
 const sysEl = document.querySelector('.sys');
+const modelDescriptorEl = document.getElementById('modelDescriptor');
 const multiToggleEl = document.getElementById('multiToggle');
 const multiModelsEl = document.getElementById('multiModels');
 const batchToggleBtn = document.getElementById('batchToggle');
@@ -28,6 +29,7 @@ const stopBtn = document.getElementById('stopBtn');
 const webllmLoader = document.getElementById('webllmLoader');
 const webllmLoaderBar = document.getElementById('webllmLoaderBar');
 const webllmLoaderText = document.getElementById('webllmLoaderText');
+const streamStatusEl = document.getElementById('streamStatus');
 const systemExtraEl = document.getElementById('systemExtra');
 const quickPromptsEl = document.getElementById('quickPrompts');
 
@@ -38,6 +40,16 @@ const personaPrompts = {
   coder: 'You are a focused coding assistant. Return concise answers, bullet steps, and minimal prose. Show code blocks when helpful.',
   coach: 'You are a productivity coach. Give clear next actions and keep replies under 4 sentences.',
   roleplay: 'You are the in-world narrator for the 3D game, describing scenes briefly and helping the player with direction.'
+};
+
+const modelMeta = {
+  'gpt-oss-20': { variant: 'local', text: 'Local • Ollama default' },
+  'llama3.2': { variant: 'local', text: 'Local • Ollama' },
+  'qwen2.5': { variant: 'local', text: 'Local • Ollama' },
+  'gpt-4o-mini': { variant: 'cloud', text: 'Cloud • OpenAI' },
+  'gpt-4o': { variant: 'cloud', text: 'Cloud • OpenAI' },
+  'web-llm:Llama-3.2-1B-Instruct-q4f16_1-MLC': { variant: 'browser', text: 'Browser • WebGPU' },
+  'web-llm:Phi-3-mini-4k-instruct-q4f16_1-MLC': { variant: 'browser', text: 'Browser • WebGPU' }
 };
 
 function getSystemPrompt() {
@@ -56,6 +68,8 @@ let speakEnabled = false;
 let recognition = null;
 let micActive = false;
 let isStreaming = false;
+let activeStream = null; // Tracks current streaming transport (fetch, sse, webllm)
+let streamCancelledByUser = false;
 
 // Limit SSE payload size to avoid long URLs
 const MAX_HISTORY = 12; // last 12 non-system messages
@@ -230,6 +244,56 @@ function setLoading(loading) {
   inputEl.disabled = loading;
 }
 
+function setStreamStatus(text, tone = 'muted') {
+  if (!streamStatusEl) return;
+  streamStatusEl.textContent = text;
+  streamStatusEl.dataset.tone = tone;
+}
+
+function beginStreaming(type, placeholder = null) {
+  isStreaming = true;
+  streamCancelledByUser = false;
+  activeStream = { type, placeholder, controller: null, eventSource: null, cancelled: false };
+  if (stopBtn) stopBtn.style.display = 'inline-flex';
+  setStreamStatus(`Streaming (${type})`, 'active');
+}
+
+function attachStreamController(controller) {
+  if (activeStream) activeStream.controller = controller;
+}
+
+function attachEventSource(es) {
+  if (activeStream) activeStream.eventSource = es;
+}
+
+function clearStreaming(statusText = 'Idle') {
+  isStreaming = false;
+  activeStream = null;
+  streamCancelledByUser = false;
+  if (stopBtn) stopBtn.style.display = 'none';
+  setStreamStatus(statusText, statusText === 'Idle' ? 'muted' : 'active');
+}
+
+function abortActiveStream(reason = 'Stream stopped') {
+  if (!activeStream) return;
+  streamCancelledByUser = true;
+  activeStream.cancelled = true;
+  if (activeStream.controller) {
+    try { activeStream.controller.abort(); } catch {}
+  }
+  if (activeStream.eventSource) {
+    try { activeStream.eventSource.close(); } catch {}
+  }
+  if (activeStream.placeholder) {
+    activeStream.placeholder.textContent = reason;
+    activeStream.placeholder.classList.add('muted');
+  }
+  clearStreaming('Stopped');
+  setLoading(false);
+  removeTypingIndicator();
+  inputEl.focus();
+}
+
 function autoResize() {
   inputEl.style.height = 'auto';
   inputEl.style.height = Math.min(inputEl.scrollHeight, 200) + 'px';
@@ -247,6 +311,9 @@ async function sendMessage() {
 
   const model = modelEl.value;
   setLoading(true);
+  if (isStreaming) abortActiveStream('Replaced by new message');
+  clearStreaming('Idle');
+  setStreamStatus(streamEl?.checked ? 'Preparing stream…' : 'Sending…', 'active');
   showTypingIndicator();
 
   try {
@@ -261,10 +328,9 @@ async function sendMessage() {
       await window.WebLLMBridge.ensureInit(modelId);
       const doStream = !!(streamEl && streamEl.checked);
       if (doStream && window.WebLLMBridge.streamChat) {
-        isStreaming = true;
-        if (stopBtn) stopBtn.style.display = 'inline-flex';
         removeTypingIndicator();
         const placeholder = addMessage('assistant', '');
+        beginStreaming('WebLLM', placeholder);
         let full = '';
         await window.WebLLMBridge.streamChat(getTrimmedMessages(), (delta) => {
           full += delta || '';
@@ -275,8 +341,7 @@ async function sendMessage() {
         placeholder.remove();
         addMessage('assistant', full, messages.length - 1);
         if (webllmLoader) webllmLoader.style.display = 'none';
-        isStreaming = false;
-        if (stopBtn) stopBtn.style.display = 'none';
+        clearStreaming();
         return;
       } else {
         const reply = await window.WebLLMBridge.chat(getTrimmedMessages());
@@ -297,9 +362,12 @@ async function sendMessage() {
         const url = `/api/chat-sse?payload=${encodeURIComponent(payload)}`;
         removeTypingIndicator();
         const placeholder = addMessage('assistant', '');
+        beginStreaming('SSE', placeholder);
         let full = '';
         const es = new EventSource(url);
+        attachEventSource(es);
         es.onmessage = (e) => {
+          if (activeStream?.cancelled) return;
           const chunk = e.data || '';
           full += chunk;
           placeholder.textContent += chunk;
@@ -307,25 +375,41 @@ async function sendMessage() {
         };
         es.addEventListener('done', () => {
           es.close();
+          if (streamCancelledByUser || activeStream?.cancelled) {
+            setLoading(false);
+            clearStreaming('Stopped');
+            streamCancelledByUser = false;
+            return;
+          }
           messages.push({ role: 'assistant', content: full });
           placeholder.remove();
           addMessage('assistant', full, messages.length - 1);
+          clearStreaming();
           setLoading(false);
           inputEl.focus();
         });
         es.onerror = (e) => {
-          console.error('SSE error:', e);
           es.close();
+          if (streamCancelledByUser || activeStream?.cancelled) {
+            clearStreaming('Stopped');
+            streamCancelledByUser = false;
+            return;
+          }
+          console.error('SSE error:', e);
           addMessage('assistant', '⚠️ Streaming error');
+          clearStreaming('Error');
           setLoading(false);
           inputEl.focus();
         };
         return; // Exit; loading cleared in SSE handlers
       }
+      const controller = new AbortController();
+      attachStreamController(controller);
       const res = await fetch('/api/chat-stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages, model })
+        body: JSON.stringify({ messages, model }),
+        signal: controller.signal
       });
       if (!res.ok || !res.body) {
         removeTypingIndicator();
@@ -334,12 +418,14 @@ async function sendMessage() {
       }
       removeTypingIndicator();
       const reader = res.body.getReader();
+      const placeholder = addMessage('assistant', '');
+      beginStreaming('fetch', placeholder);
       const decoder = new TextDecoder();
       let full = '';
-      const placeholder = addMessage('assistant', '');
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
+        if (streamCancelledByUser || activeStream?.cancelled) break;
         const chunk = decoder.decode(value, { stream: true });
         full += chunk;
         // Stream as plain text, then format at the end for markdown
@@ -347,9 +433,15 @@ async function sendMessage() {
         chatEl.scrollTop = chatEl.scrollHeight;
       }
       // Replace placeholder with formatted content and persist in history
-      messages.push({ role: 'assistant', content: full });
-      placeholder.remove();
-      addMessage('assistant', full, messages.length - 1);
+      if (streamCancelledByUser || activeStream?.cancelled) {
+        clearStreaming('Stopped');
+        streamCancelledByUser = false;
+      } else {
+        messages.push({ role: 'assistant', content: full });
+        placeholder.remove();
+        addMessage('assistant', full, messages.length - 1);
+        clearStreaming();
+      }
     } else {
       if (multiToggleEl?.checked) {
         // Multi-LLM call
@@ -391,13 +483,20 @@ async function sendMessage() {
       }
     }
   } catch (e) {
-    removeTypingIndicator();
-    addMessage('assistant', `⚠️ Error: ${e.message || 'Could not contact server'}`);
-    console.error(e);
+    if (streamCancelledByUser || activeStream?.cancelled || e?.name === 'AbortError') {
+      clearStreaming('Stopped');
+      streamCancelledByUser = false;
+    } else {
+      removeTypingIndicator();
+      addMessage('assistant', `⚠️ Error: ${e.message || 'Could not contact server'}`);
+      console.error(e);
+      clearStreaming('Error');
+    }
   } finally {
-    setLoading(false);
+    if (!isStreaming) setLoading(false);
     inputEl.focus();
     if (webllmLoader) webllmLoader.style.display = 'none';
+    if (!isStreaming) clearStreaming('Idle');
   }
 }
 
@@ -434,6 +533,13 @@ systemExtraEl?.addEventListener('input', () => {
   try { localStorage.setItem('chat:customSystem', systemExtraEl.value || ''); } catch {}
 });
 
+function updateModelDescriptor(val) {
+  if (!modelDescriptorEl) return;
+  const meta = modelMeta[val] || { variant: 'local', text: 'Local / default route' };
+  modelDescriptorEl.dataset.variant = meta.variant;
+  modelDescriptorEl.textContent = meta.text;
+}
+
 // Update system hint based on selected model (local vs cloud)
 function updateSysHint() {
   const val = modelEl.value.trim();
@@ -445,6 +551,7 @@ function updateSysHint() {
   } else {
     sysEl.innerHTML = 'Using local Ollama. Pull models with <code>ollama pull modelname</code>';
   }
+  updateModelDescriptor(val);
 }
 
 modelEl.addEventListener('change', updateSysHint);
@@ -551,12 +658,13 @@ micBtn?.addEventListener('click', () => {
   recognition.start();
 });
 
-// Stop streaming handler (browser WebLLM)
+// Stop streaming handler (all transports)
 stopBtn?.addEventListener('click', async () => {
   if (!isStreaming) return;
-  try { await window.WebLLMBridge?.cancel?.(); } catch {}
-  isStreaming = false;
-  if (stopBtn) stopBtn.style.display = 'none';
+  if (activeStream?.type === 'WebLLM') {
+    try { await window.WebLLMBridge?.cancel?.(); } catch {}
+  }
+  abortActiveStream('Stream stopped');
 });
 
 // Focus input on page load

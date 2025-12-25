@@ -6,17 +6,30 @@
   <title>LLM Chat</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=Manrope:wght@500;600&display=swap" rel="stylesheet">
   <style>
-    :root { --bg: #0b1220; --panel: #0f172a; --text: #e5e7eb; --accent: #06b6d4; --accent-hover: #0891b2; --user-bg: #102a43; --assistant-bg: #0d223a; --border: #1f2a3a; }
+    :root { --bg: #080f1a; --panel: #0d1626; --panel-2: #0f1a2e; --text: #e5e7eb; --muted: #8fa3c2; --accent: #0ea5e9; --accent-2: #f59e0b; --accent-hover: #0284c7; --user-bg: #0f2338; --assistant-bg: #0c2036; --border: #1b2a3d; --pill: #0f253c; }
     * { box-sizing: border-box; }
-    body { margin: 0; font-family: 'Space Grotesk', 'Inter', 'Segoe UI', -apple-system, system-ui, sans-serif; background: radial-gradient(120% 120% at 10% 20%, rgba(6,182,212,0.06), transparent 45%), radial-gradient(120% 120% at 90% 10%, rgba(8,145,178,0.08), transparent 40%), var(--bg); color: var(--text); min-height: 100vh; }
-    .container { max-width: 1100px; margin: 0 auto; padding: 20px; display: flex; flex-direction: column; height: 100vh; gap: 12px; }
-    header { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: center; margin-bottom: 4px; padding-bottom: 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
-    header h1 { font-size: 22px; margin: 0; font-weight: 600; letter-spacing: -0.02em; background: linear-gradient(120deg, #06b6d4, #7dd3fc); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-    .header-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; }
-    header select { background: var(--panel); color: var(--text); border: 1px solid var(--border); padding: 8px 12px; border-radius: 10px; font-size: 14px; cursor: pointer; transition: border-color 0.2s, transform 0.1s; }
+    body { margin: 0; font-family: 'Space Grotesk', 'Manrope', 'Segoe UI', -apple-system, system-ui, sans-serif; background: radial-gradient(130% 120% at 10% 15%, rgba(14,165,233,0.08), transparent 40%), radial-gradient(130% 120% at 90% 5%, rgba(245,158,11,0.06), transparent 38%), var(--bg); color: var(--text); min-height: 100vh; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 20px; display: flex; flex-direction: column; height: 100vh; gap: 12px; }
+    header { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; margin-bottom: 4px; padding-bottom: 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .brand { display: flex; flex-direction: column; gap: 4px; }
+    .eyebrow { margin: 0; color: var(--muted); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; }
+    header h1 { font-size: 24px; margin: 0; font-weight: 700; letter-spacing: -0.03em; background: linear-gradient(120deg, #0ea5e9, #38bdf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .subhead { margin: 0; color: #cbd5e1; font-size: 13px; letter-spacing: -0.01em; }
+    .header-controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px; align-items: stretch; justify-content: flex-end; }
+    .control-stack { display: flex; flex-direction: column; gap: 4px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 8px 10px; min-width: 0; }
+    .control-stack label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+    .inline-control { display: flex; gap: 8px; align-items: center; }
+    .inline-control select { flex: 1; }
+    header select { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); padding: 9px 12px; border-radius: 10px; font-size: 14px; cursor: pointer; transition: border-color 0.18s, transform 0.1s; width: 100%; }
     header select:hover, header select:focus { border-color: var(--accent); outline: none; transform: translateY(-1px); }
+    .pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 10px; font-size: 12px; border: 1px solid var(--border); background: var(--pill); color: var(--muted); white-space: nowrap; }
+    .pill[data-variant="local"] { border-color: rgba(34,197,94,0.35); color: #34d399; }
+    .pill[data-variant="cloud"] { border-color: rgba(14,165,233,0.35); color: #7dd3fc; }
+    .pill[data-variant="browser"] { border-color: rgba(245,158,11,0.45); color: #fbbf24; }
+    .pill[data-tone="active"] { border-color: rgba(14,165,233,0.5); color: #bae6fd; }
+    .pill[data-tone="muted"] { color: #a5b4c5; border-color: var(--border); }
     .btn-icon { background: var(--panel); border: 1px solid var(--border); color: var(--text); width: 36px; height: 36px; border-radius: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
     .btn-icon:hover { background: #1f2937; border-color: var(--accent); }
     .chat { background: var(--panel); border: 1px solid #1b2738; border-radius: 16px; flex: 1; overflow-y: auto; padding: 18px; display: flex; flex-direction: column; gap: 12px; scroll-behavior: smooth; box-shadow: 0 20px 60px rgba(0,0,0,0.35); }
@@ -25,6 +38,7 @@
     .chat::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
     .chat::-webkit-scrollbar-thumb:hover { background: #4b5563; }
     .msg { padding: 14px 16px; border-radius: 14px; max-width: 90%; line-height: 1.5; animation: fadeIn 0.3s ease; word-wrap: break-word; border: 1px solid rgba(255,255,255,0.03); position: relative; }
+    .msg.muted { color: #94a3b8; font-style: italic; }
     .msg pre { background: #0d1117; padding: 12px; border-radius: 10px; overflow-x: auto; margin: 10px 0; font-size: 13px; border: 1px solid #1f2937; }
     .msg code { background: #0d1117; padding: 2px 6px; border-radius: 6px; font-size: 13px; border: 1px solid #1f2937; }
     .msg-actions { position: absolute; top: 8px; right: 10px; display: flex; gap: 6px; opacity: 0; transition: opacity 0.2s; }
@@ -52,6 +66,7 @@
     .footer { display: flex; justify-content: space-between; align-items: center; margin-top: 4px; flex-wrap: wrap; gap: 8px; }
     .sys { color: #9ca3af; font-size: 12px; }
     .shortcut { color: #4b5563; font-size: 11px; }
+    .status-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #6b7280; text-align: center; gap: 12px; letter-spacing: -0.01em; }
     .empty-state svg { width: 48px; height: 48px; opacity: 0.5; }
     .empty-state p { margin: 0; font-size: 15px; }
@@ -71,51 +86,85 @@
 <body>
   <div class="container">
     <header>
-      <h1>LLM Chat</h1>
+      <div class="brand">
+        <p class="eyebrow">Multi-path chat</p>
+        <h1>LLM Chat</h1>
+        <p class="subhead">Local · Cloud · Browser-ready</p>
+      </div>
       <div class="header-controls">
-        <select id="model">
-          <option value="gpt-oss-20">gpt-oss-20 (local)</option>
-          <option value="llama3.2">llama3.2 (local)</option>
-          <option value="qwen2.5">qwen2.5 (local)</option>
-          <option value="gpt-4o-mini">gpt-4o-mini (cloud)</option>
-          <option value="gpt-4o">gpt-4o (cloud)</option>
-          <option value="web-llm:Llama-3.2-1B-Instruct-q4f16_1-MLC">Llama 3.2 1B (browser)</option>
-          <option value="web-llm:Phi-3-mini-4k-instruct-q4f16_1-MLC">Phi-3 Mini 4K (browser)</option>
-        </select>
-        <select id="persona" title="Agent persona">
-          <option value="friendly" selected>Friendly guide</option>
-          <option value="coder">Concise coder</option>
-          <option value="coach">Productivity coach</option>
-          <option value="roleplay">In-world narrator</option>
-        </select>
-        <label style="display:flex; align-items:center; gap:6px; color:#9ca3af; font-size:13px;">
-          <input type="checkbox" id="multiToggle" /> Multi-LLM
-        </label>
-        <input id="multiModels" placeholder="models (comma-separated)" value="gpt-oss-20,llama3.2,qwen2.5" style="background: var(--panel); color: var(--text); border: 1px solid var(--border); padding: 8px 12px; border-radius: 8px; font-size: 13px; width: 280px;" />
-        <select id="aggregator" title="Aggregator" style="background: var(--panel); color: var(--text); border: 1px solid var(--border); padding: 8px 12px; border-radius: 8px; font-size: 13px;">
-          <option value="length" selected>Length</option>
-          <option value="keyword">Keyword+Length</option>
-          <option value="rank-by-model">Rank-by-Model</option>
-          <option value="semantic">Semantic Sim</option>
-          <option value="meta-llm">Meta-LLM Judge</option>
-          <option value="voting">Voting/Consensus</option>
-        </select>
-        <label style="display:flex; align-items:center; gap:6px; color:#9ca3af; font-size:13px;">
-          <input type="checkbox" id="streamToggle" /> Stream
-        </label>
-        <select id="streamTransport" title="Streaming transport">
-          <option value="fetch" selected>Fetch</option>
-          <option value="sse">SSE</option>
-        </select>
-        <button class="btn-icon" id="clearChat" title="Clear chat">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
-        </button>
-        <button class="btn-icon" id="batchToggle" title="Batch mode">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16c0 1.1.9 2 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path d="M14 3v5h5M16 13H8M16 17H8M10 9H8"/></svg>
-        </button>
-        <button class="btn-icon" id="statsToggle" title="Analytics">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
-        </button>
+        <div class="control-stack">
+          <label for="model">Model</label>
+          <div class="inline-control">
+            <select id="model">
+              <optgroup label="Local (Ollama)">
+                <option value="gpt-oss-20">gpt-oss-20</option>
+                <option value="llama3.2">llama3.2</option>
+                <option value="qwen2.5">qwen2.5</option>
+              </optgroup>
+              <optgroup label="Cloud (OpenAI)">
+                <option value="gpt-4o-mini">gpt-4o-mini</option>
+                <option value="gpt-4o">gpt-4o</option>
+              </optgroup>
+              <optgroup label="Browser (WebLLM)">
+                <option value="web-llm:Llama-3.2-1B-Instruct-q4f16_1-MLC">Llama 3.2 1B</option>
+                <option value="web-llm:Phi-3-mini-4k-instruct-q4f16_1-MLC">Phi-3 Mini 4K</option>
+              </optgroup>
+            </select>
+            <span id="modelDescriptor" class="pill" data-variant="local">Local • GPU</span>
+          </div>
+        </div>
+        <div class="control-stack">
+          <label for="persona">Persona</label>
+          <select id="persona" title="Agent persona">
+            <option value="friendly" selected>Friendly guide</option>
+            <option value="coder">Concise coder</option>
+            <option value="coach">Productivity coach</option>
+            <option value="roleplay">In-world narrator</option>
+          </select>
+        </div>
+        <div class="control-stack">
+          <label for="multiToggle">Multi-LLM</label>
+          <div class="inline-control">
+            <label style="display:flex; align-items:center; gap:6px; color:#cbd5e1; font-size:13px;">
+              <input type="checkbox" id="multiToggle" /> Enable
+            </label>
+            <input id="multiModels" placeholder="models (comma-separated)" value="gpt-oss-20,llama3.2,qwen2.5" style="background: var(--panel-2); color: var(--text); border: 1px solid var(--border); padding: 8px 10px; border-radius: 8px; font-size: 13px; flex:1;" />
+          </div>
+          <select id="aggregator" title="Aggregator" style="background: var(--panel-2); color: var(--text); border: 1px solid var(--border); padding: 8px 12px; border-radius: 8px; font-size: 13px;">
+            <option value="length" selected>Length</option>
+            <option value="keyword">Keyword+Length</option>
+            <option value="rank-by-model">Rank-by-Model</option>
+            <option value="semantic">Semantic Sim</option>
+            <option value="meta-llm">Meta-LLM Judge</option>
+            <option value="voting">Voting/Consensus</option>
+          </select>
+        </div>
+        <div class="control-stack">
+          <label for="streamToggle">Streaming</label>
+          <div class="inline-control">
+            <label style="display:flex; align-items:center; gap:6px; color:#cbd5e1; font-size:13px;">
+              <input type="checkbox" id="streamToggle" /> Live
+            </label>
+            <select id="streamTransport" title="Streaming transport" style="max-width: 140px;">
+              <option value="fetch" selected>Fetch</option>
+              <option value="sse">SSE</option>
+            </select>
+          </div>
+          <div class="status-row">
+            <span id="streamStatus" class="pill" data-tone="muted">Idle</span>
+          </div>
+        </div>
+        <div class="control-stack" style="flex-direction: row; align-items: center; gap: 8px; justify-content: flex-end;">
+          <button class="btn-icon" id="clearChat" title="Clear chat">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+          </button>
+          <button class="btn-icon" id="batchToggle" title="Batch mode">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16c0 1.1.9 2 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path d="M14 3v5h5M16 13H8M16 17H8M10 9H8"/></svg>
+          </button>
+          <button class="btn-icon" id="statsToggle" title="Analytics">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
+          </button>
+        </div>
       </div>
     </header>
     <div class="utility">
@@ -187,7 +236,7 @@
   <div id="webllmLoader" style="display:none; position:fixed; left:20px; bottom:80px; background:#0b1220; border:1px solid #1f2937; border-radius:10px; padding:12px; width:280px; box-shadow:0 10px 30px rgba(0,0,0,0.35); z-index:1000;">
     <div style="font-size:12px; color:#9ca3af; margin-bottom:6px;">Initializing browser model…</div>
     <div style="height:8px; background:#111827; border-radius:6px; overflow:hidden;">
-      <div id="webllmLoaderBar" style="height:100%; width:0%; background:linear-gradient(90deg,#3b82f6,#8b5cf6);"></div>
+      <div id="webllmLoaderBar" style="height:100%; width:0%; background:linear-gradient(90deg,#0ea5e9,#22d3ee);"></div>
     </div>
     <div id="webllmLoaderText" style="font-size:11px; color:#6b7280; margin-top:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Downloading…</div>
   </div>
