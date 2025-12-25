@@ -28,6 +28,8 @@ const stopBtn = document.getElementById('stopBtn');
 const webllmLoader = document.getElementById('webllmLoader');
 const webllmLoaderBar = document.getElementById('webllmLoaderBar');
 const webllmLoaderText = document.getElementById('webllmLoaderText');
+const systemExtraEl = document.getElementById('systemExtra');
+const quickPromptsEl = document.getElementById('quickPrompts');
 
 let batchResults = [];
 
@@ -40,7 +42,9 @@ const personaPrompts = {
 
 function getSystemPrompt() {
   const key = personaEl?.value || 'friendly';
-  return personaPrompts[key] || personaPrompts.friendly;
+  const base = personaPrompts[key] || personaPrompts.friendly;
+  const extra = (systemExtraEl?.value || '').trim();
+  return extra ? `${base}\n${extra}` : base;
 }
 
 let messages = [
@@ -80,12 +84,16 @@ function formatContent(content) {
   return formatted;
 }
 
-function addMessage(role, content) {
+function addMessage(role, content, msgIndex = null) {
   hideEmptyState();
   const div = document.createElement('div');
   div.className = `msg ${role === 'user' ? 'user' : 'assistant'}`;
+  if (msgIndex !== null && !Number.isNaN(msgIndex)) {
+    div.dataset.msgIndex = String(msgIndex);
+  }
+  const body = document.createElement('div');
   if (role === 'assistant') {
-    div.innerHTML = formatContent(content);
+    body.innerHTML = formatContent(content);
     if (speakEnabled && window.speechSynthesis) {
       const utter = new SpeechSynthesisUtterance(content);
       utter.rate = 1.0;
@@ -93,11 +101,112 @@ function addMessage(role, content) {
       window.speechSynthesis.speak(utter);
     }
   } else {
-    div.textContent = content;
+    body.textContent = content;
   }
+
+  const actions = document.createElement('div');
+  actions.className = 'msg-actions';
+  if (role === 'assistant' || role === 'user') {
+    const copyBtn = document.createElement('button');
+    copyBtn.textContent = 'Copy';
+    copyBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      try {
+        await navigator.clipboard.writeText(content);
+        copyBtn.textContent = 'Copied';
+        setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1200);
+      } catch {}
+    });
+    actions.appendChild(copyBtn);
+
+    if (role === 'assistant' && msgIndex !== null) {
+      const regenBtn = document.createElement('button');
+      regenBtn.textContent = 'Regenerate';
+      regenBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        regenerateAssistant(msgIndex);
+      });
+      actions.appendChild(regenBtn);
+    }
+  }
+
+  div.appendChild(body);
+  if (actions.children.length) div.appendChild(actions);
   chatEl.appendChild(div);
   chatEl.scrollTop = chatEl.scrollHeight;
   return div;
+}
+
+function renderAllMessages() {
+  chatEl.innerHTML = '';
+  if (!messages.length) {
+    showEmptyState();
+    chatEl.appendChild(emptyState);
+    return;
+  }
+  hideEmptyState();
+  messages.forEach((m, idx) => addMessage(m.role, m.content, idx));
+}
+
+async function regenerateAssistant(msgIndex) {
+  if (isLoading) return;
+  const idx = Number(msgIndex);
+  if (!Number.isInteger(idx) || idx < 0 || idx >= messages.length) return;
+  if (messages[idx]?.role !== 'assistant') return;
+
+  let lastUserIdx = -1;
+  for (let i = idx - 1; i >= 0; i--) {
+    if (messages[i]?.role === 'user') { lastUserIdx = i; break; }
+  }
+  if (lastUserIdx === -1) return;
+
+  // If regenerating a mid-thread assistant, confirm dropping later turns
+  if (idx < messages.length - 1) {
+    const ok = window.confirm('Regenerating this turn will drop messages after it. Continue?');
+    if (!ok) return;
+  }
+
+  // Trim history up to the triggering user message
+  messages = messages.slice(0, lastUserIdx + 1);
+  renderAllMessages();
+
+  setLoading(true);
+  showTypingIndicator();
+
+  try {
+    const dialog = messages.filter(m => m.role !== 'system');
+    const last = dialog[dialog.length - 1];
+    if (!last || last.role !== 'user') throw new Error('No user message to regenerate');
+
+    const history = dialog.slice(0, dialog.length - 1);
+    const res = await fetch('/api/agent-chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: modelEl.value,
+        persona: personaEl?.value || 'friendly',
+        history,
+        input: last.content
+      })
+    });
+
+    removeTypingIndicator();
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'Regenerate failed');
+    }
+
+    const reply = data.text || '[No response]';
+    messages.push({ role: 'assistant', content: reply });
+    addMessage('assistant', reply, messages.length - 1);
+  } catch (err) {
+    removeTypingIndicator();
+    addMessage('assistant', `⚠️ Error: ${err.message}`);
+  } finally {
+    setLoading(false);
+    inputEl.focus();
+  }
 }
 
 function showTypingIndicator() {
@@ -134,7 +243,7 @@ async function sendMessage() {
   autoResize();
 
   messages.push({ role: 'user', content: text });
-  addMessage('user', text);
+  addMessage('user', text, messages.length - 1);
 
   const model = modelEl.value;
   setLoading(true);
@@ -162,8 +271,9 @@ async function sendMessage() {
           placeholder.textContent += delta || '';
           chatEl.scrollTop = chatEl.scrollHeight;
         });
-        placeholder.innerHTML = formatContent(full);
         messages.push({ role: 'assistant', content: full });
+        placeholder.remove();
+        addMessage('assistant', full, messages.length - 1);
         if (webllmLoader) webllmLoader.style.display = 'none';
         isStreaming = false;
         if (stopBtn) stopBtn.style.display = 'none';
@@ -172,7 +282,7 @@ async function sendMessage() {
         const reply = await window.WebLLMBridge.chat(getTrimmedMessages());
         removeTypingIndicator();
         messages.push({ role: 'assistant', content: reply });
-        addMessage('assistant', reply);
+        addMessage('assistant', reply, messages.length - 1);
         if (webllmLoader) webllmLoader.style.display = 'none';
         return;
       }
@@ -197,8 +307,9 @@ async function sendMessage() {
         };
         es.addEventListener('done', () => {
           es.close();
-          placeholder.innerHTML = formatContent(full);
           messages.push({ role: 'assistant', content: full });
+          placeholder.remove();
+          addMessage('assistant', full, messages.length - 1);
           setLoading(false);
           inputEl.focus();
         });
@@ -236,8 +347,9 @@ async function sendMessage() {
         chatEl.scrollTop = chatEl.scrollHeight;
       }
       // Replace placeholder with formatted content and persist in history
-      placeholder.innerHTML = formatContent(full);
       messages.push({ role: 'assistant', content: full });
+      placeholder.remove();
+      addMessage('assistant', full, messages.length - 1);
     } else {
       if (multiToggleEl?.checked) {
         // Multi-LLM call
@@ -275,7 +387,7 @@ async function sendMessage() {
         }
         const reply = data.text || '[No response]';
         messages.push({ role: 'assistant', content: reply });
-        addMessage('assistant', reply);
+        addMessage('assistant', reply, messages.length - 1);
       }
     }
   } catch (e) {
@@ -316,6 +428,11 @@ inputEl.addEventListener('keydown', (e) => {
 });
 
 personaEl?.addEventListener('change', applyPersona);
+
+systemExtraEl?.addEventListener('input', () => {
+  messages[0] = { role: 'system', content: getSystemPrompt() };
+  try { localStorage.setItem('chat:customSystem', systemExtraEl.value || ''); } catch {}
+});
 
 // Update system hint based on selected model (local vs cloud)
 function updateSysHint() {
@@ -361,6 +478,11 @@ try {
   }
   const savedStream = localStorage.getItem('chat:stream');
   if (savedStream !== null && streamEl) streamEl.checked = savedStream === '1';
+  const savedSystem = localStorage.getItem('chat:customSystem');
+  if (savedSystem && systemExtraEl) {
+    systemExtraEl.value = savedSystem;
+    messages[0] = { role: 'system', content: getSystemPrompt() };
+  }
   updateSysHint();
 } catch {}
 
@@ -649,7 +771,7 @@ function renderMultiResults(promptText, payload) {
   useBestBtn.addEventListener('click', () => {
     const reply = best || '[No best response]';
     messages.push({ role: 'assistant', content: reply });
-    addMessage('assistant', reply);
+    addMessage('assistant', reply, messages.length - 1);
   });
 
   const saveBtn = document.createElement('button');
@@ -703,3 +825,14 @@ window.addEventListener('webllm-ready', () => {
   if (webllmLoaderBar) webllmLoaderBar.style.width = '100%';
   setTimeout(() => { if (webllmLoader) webllmLoader.style.display = 'none'; }, 400);
 });
+
+if (quickPromptsEl) {
+  quickPromptsEl.addEventListener('click', (e) => {
+    const target = e.target;
+    if (target && target.dataset && target.dataset.prompt) {
+      inputEl.value = target.dataset.prompt;
+      autoResize();
+      inputEl.focus();
+    }
+  });
+}

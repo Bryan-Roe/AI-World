@@ -1,9 +1,9 @@
 # Copilot Instructions (AI Agents)
 
-This project is a hybrid Node.js + Python app with three pillars:
-- Web LLM chat (Express) talking to local Ollama and OpenAI fallback
-- Python training suite (language, image, RL) persisting checkpoints
-- Optional Three.js 3D world, trainable via Python agents
+Hybrid Node.js + Python app:
+- Web LLM chat (Express) with Ollama local + OpenAI fallback
+- Python training (language, image, RL) saving checkpoints
+- Optional Three.js 3D world trainable via Python agents
 
 ## Big Picture Flow
 - Browser UI ↔ server.js (ESM, logging, rate limits)
@@ -24,21 +24,23 @@ Invoke-WebRequest http://localhost:11434/api/tags
 docker-compose up -d
 curl http://localhost:3000/health
 curl http://localhost:11434/api/tags
+# Pull models inside container
+docker exec ollama-local ollama pull gpt-oss-20
+docker exec ollama-local ollama pull llama3.2
+docker exec ollama-local ollama pull qwen2.5
 ```
 
 ## Server API Patterns
 - Inputs validated: `/api/chat{,-stream}` expect `messages: [{role,content}], model`
 - History trimmed: system + last 12 messages (mirrored in `public/app.js`)
 - Model routing: local default `gpt-oss-20`; `gpt-4o(-mini)` -> OpenAI
-- Routing rules: any `gpt-oss-*` → Ollama; any `gpt-*` not `gpt-oss-*` or listed in `CLOUD_MODELS` → OpenAI. Configure `DEFAULT_LOCAL_MODEL`, `CLOUD_MODELS` in [server.js](server.js).
+- Routing rules: `gpt-oss-*` → Ollama; `gpt-*` (non-`gpt-oss-*`) or in `CLOUD_MODELS` → OpenAI. Configure `DEFAULT_LOCAL_MODEL`/`CLOUD_MODELS` in [server.js](server.js).
 - Streaming: `/api/chat-stream` (Fetch) and `/api/chat-sse` (SSE)
 - Consistent shape: response `{text, raw}`; 429 limit: 30 req/min/IP
 
 ### Persona Wrapper (`/api/agent-chat`)
-- Injects `AGENT_PERSONAS[persona]` as a system prompt, then trims history to 12.
-- Input: `{ input: string, history: [{role,content}], persona: 'friendly'|'curious'|'protective', model }`.
-- Proxies internally to `/api/chat` to reuse routing and response shape.
-- Returns `{text, raw}`; use for AI companion/persona-specific interactions.
+- Injects `AGENT_PERSONAS[persona]`, trims history to 12, then proxies to `/api/chat`.
+- Input: `{ input, history, persona: 'friendly'|'curious'|'protective', model }`; returns `{text, raw}`.
 
 ## Frontend Conventions
 - Global `messages` with system role; `MAX_HISTORY = 12`
@@ -57,10 +59,10 @@ curl http://localhost:11434/api/tags
 
 ## Project-Specific Tips
 - ESM only (`type: module`); keep secrets server-side.
-- Python paths: use `os.path.join()` with relative roots.
-- Training: run one script at a time to avoid CUDA conflicts.
-- Model config: tweak `DEFAULT_LOCAL_MODEL`, `CLOUD_MODELS`, `CLOUD_DEFAULT_MODEL`, `OLLAMA_URL` near the top of [server.js](server.js).
-- New models: update [public/index.html](public/index.html) select and run `ollama pull <model>`.
+- Python paths via `os.path.join()`; avoid absolute paths.
+- Training: one script at a time (CUDA).
+- Model config knobs near top of [server.js](server.js): `DEFAULT_LOCAL_MODEL`, `CLOUD_MODELS`, `CLOUD_DEFAULT_MODEL`, `OLLAMA_URL`.
+- New models: add to [public/index.html](public/index.html); `ollama pull <model>`.
 
 ## Quick Tasks
 - Compare models: POST `/api/multi-chat`

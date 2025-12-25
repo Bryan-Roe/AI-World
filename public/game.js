@@ -35,7 +35,11 @@ class WorldGenerator {
       waypoint: null,
       waypointMarker: null,
       autoLootRange: 30,
-      lastResourceCallout: 0
+      lastResourceCallout: 0,
+      voiceEnabled: true,
+      voiceRate: 1.02,
+      voicePitch: 1.05,
+      voiceVolume: 0.85
     };
     this.resident = {
       mesh: null,
@@ -421,15 +425,27 @@ class WorldGenerator {
     const spawnBtn = document.getElementById('spawn-companion-btn');
     const pauseBtn = document.getElementById('pause-companion-btn');
     const companionModel = document.getElementById('companion-model');
+    const companionPersonality = document.getElementById('companion-personality');
+    const companionVoiceToggle = document.getElementById('companion-voice-toggle');
     if (companionModel) {
+      this.companion.model = companionModel.value;
       companionModel.addEventListener('change', () => {
         this.companion.model = companionModel.value;
-          const companionPersonality = document.getElementById('companion-personality');
-          if (companionPersonality) {
-            companionPersonality.addEventListener('change', () => {
-              this.companion.personality = companionPersonality.value;
-            });
-          }
+      });
+    }
+    if (companionPersonality) {
+      this.companion.personality = companionPersonality.value;
+      companionPersonality.addEventListener('change', () => {
+        this.companion.personality = companionPersonality.value;
+      });
+    }
+    if (companionVoiceToggle) {
+      companionVoiceToggle.checked = this.companion.voiceEnabled;
+      companionVoiceToggle.addEventListener('change', () => {
+        this.companion.voiceEnabled = companionVoiceToggle.checked;
+        if (!companionVoiceToggle.checked && window.speechSynthesis) {
+          window.speechSynthesis.cancel();
+        }
       });
     }
     if (spawnBtn) {
@@ -2449,6 +2465,24 @@ Rules:
     if (log) {
       log.textContent = msg;
     }
+    this.speakCompanion(msg);
+  }
+
+  speakCompanion(text) {
+    if (!this.companion.voiceEnabled) return;
+    if (typeof window === 'undefined' || !window.speechSynthesis || typeof SpeechSynthesisUtterance === 'undefined') return;
+    const cleaned = (text || '').replace(/[\u{1F300}-\u{1FAFF}]/gu, '').trim();
+    if (!cleaned) return;
+    try {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(cleaned);
+      utterance.rate = this.companion.voiceRate;
+      utterance.pitch = this.companion.voicePitch;
+      utterance.volume = this.companion.voiceVolume;
+      window.speechSynthesis.speak(utterance);
+    } catch (err) {
+      console.warn('Speech synthesis failed', err);
+    }
   }
 
   async validateOllamaConnection() {
@@ -2499,6 +2533,9 @@ Rules:
     if (this.companion.timer) {
       clearInterval(this.companion.timer);
       this.companion.timer = null;
+    }
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
     }
     this.setCompanionMessage('⏸ Companion paused.');
   }
