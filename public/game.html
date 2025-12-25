@@ -296,9 +296,10 @@
     /* LLM Chat Panel */
     #llm-chat-panel {
       position: fixed;
-      bottom: 20px;
+      bottom: 90px;
       right: 20px;
       width: min(400px, calc(100vw - 40px));
+      max-height: calc(100vh - 200px);
       background: linear-gradient(145deg, var(--panel), var(--panel-2));
       border: 1px solid var(--border);
       border-radius: 14px;
@@ -310,6 +311,7 @@
       display: none;
       z-index: 220;
       transition: all 0.3s ease;
+      overflow-y: auto;
     }
 
     #toggle-chat-btn {
@@ -479,7 +481,7 @@
 
     #player-ui {
       position: fixed;
-      bottom: 20px;
+      bottom: 90px;
       right: 20px;
       min-width: 200px;
       max-width: calc(100vw - 40px);
@@ -496,7 +498,7 @@
 
     @media (max-width: 768px) {
       #player-ui {
-        bottom: 80px;
+        bottom: 150px;
         right: 10px;
         font-size: 11px;
         min-width: 150px;
@@ -506,9 +508,9 @@
     #resident-status {
       position: fixed;
       bottom: 20px;
-      left: 370px;
+      left: 240px;
       min-width: 200px;
-      max-width: calc(100vw - 400px);
+      max-width: calc(100vw - 280px);
       background: var(--panel);
       border: 1px solid rgba(74, 222, 128, 0.35);
       border-radius: 10px;
@@ -565,7 +567,7 @@
 
     #inventory-bar {
       position: fixed;
-      bottom: 80px;
+      bottom: 20px;
       left: 50%;
       transform: translateX(-50%);
       display: flex;
@@ -1138,7 +1140,7 @@
         <kbd>Click</kbd> to enable controls<br>
         <kbd>E</kbd> Pickup &nbsp; <kbd>Q</kbd> Drop<br>
         <kbd>1-9</kbd> Select slot &nbsp; <kbd>F</kbd> Add object<br>
-        <kbd>C</kbd> Chat with AI companion<br>
+        <kbd>G</kbd> Spawn interactive &nbsp; <kbd>C</kbd> Chat with AI<br>
         ➤ <kbd>Shift+Click</kbd> Set companion waypoint<br>
         LLM build: sidebar prompt
       </p>
