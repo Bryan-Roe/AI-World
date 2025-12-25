@@ -2,6 +2,7 @@ import express from 'express';
 import morgan from 'morgan';
 import fetch from 'node-fetch';
 import dotenv from 'dotenv';
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
@@ -59,6 +60,54 @@ const SSE_RETRY_MS = Number(CFG?.sse?.retry_ms || 3000);
 const MORGAN_FORMAT = CFG?.logging?.morgan_format || 'dev';
 const JSON_LIMIT = `${CFG?.limits?.max_payload_mb || 10}mb`;
 const CHAT_MAX_HISTORY = Number(CFG?.chat?.max_history || 12);
+const TRAINING_RUNNER = path.join(process.cwd(), 'training_runner.py');
+const TRAINING_LOG_LIMIT = 1500;
+const TRAINING_MODULES = new Set([
+  'language_model',
+  'image_classifier',
+  'game_ai',
+  'custom_nn',
+  'world_generator'
+]);
+const trainingJobs = new Map();
+const resolvePythonPath = () => {
+  if (process.platform === 'win32') {
+    const candidate = path.join(process.cwd(), '.venv', 'Scripts', 'python.exe');
+    if (fs.existsSync(candidate)) return candidate;
+  } else {
+    const candidate = path.join(process.cwd(), '.venv', 'bin', 'python');
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return 'python';
+};
+const getActiveTrainingJob = () => {
+  for (const job of trainingJobs.values()) {
+    if (job.status === 'running' || job.status === 'stopping') return job;
+  }
+  return null;
+};
+const appendTrainingLog = (job, chunk) => {
+  const text = chunk.toString('utf8').replace(/\r/g, '\n');
+  job.buffer += text;
+  const lines = job.buffer.split('\n');
+  job.buffer = lines.pop() || '';
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    job.logs.push(line);
+    if (job.logs.length > TRAINING_LOG_LIMIT) {
+      job.logs.shift();
+    }
+  }
+};
+const flushTrainingLog = (job) => {
+  if (job.buffer.trim()) {
+    job.logs.push(job.buffer.trim());
+    if (job.logs.length > TRAINING_LOG_LIMIT) {
+      job.logs.shift();
+    }
+  }
+  job.buffer = '';
+};
 if (CFG?.server?.trust_proxy === true) {
   app.set('trust proxy', 1);
 }
@@ -1017,6 +1066,142 @@ app.get('/api/stats', (req, res) => {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
   }
+});
+
+// ============================================================================
+// TRAINING ENDPOINTS
+// ============================================================================
+
+app.get('/api/training/jobs', (req, res) => {
+  const jobs = Array.from(trainingJobs.values()).map(job => ({
+    id: job.id,
+    module: job.module,
+    status: job.status,
+    startedAt: job.startedAt,
+    finishedAt: job.finishedAt,
+    exitCode: job.exitCode,
+    pid: job.pid
+  }));
+  res.json({ jobs });
+});
+
+app.get('/api/training/logs/:id', (req, res) => {
+  const job = trainingJobs.get(req.params.id);
+  if (!job) {
+    return res.status(404).json({ error: 'Training job not found' });
+  }
+  const cursor = Number(req.query.cursor || 0);
+  const safeCursor = Number.isFinite(cursor) && cursor >= 0 ? cursor : 0;
+  const lines = job.logs.slice(safeCursor);
+  res.json({
+    id: job.id,
+    module: job.module,
+    status: job.status,
+    startedAt: job.startedAt,
+    finishedAt: job.finishedAt,
+    exitCode: job.exitCode,
+    cursor: job.logs.length,
+    lines
+  });
+});
+
+app.post('/api/training/start', (req, res) => {
+  try {
+    const { module, config } = req.body || {};
+    const moduleKey = typeof module === 'string' ? module.trim() : '';
+    if (!TRAINING_MODULES.has(moduleKey)) {
+      return res.status(400).json({ error: 'Unknown training module' });
+    }
+
+    const activeJob = getActiveTrainingJob();
+    if (activeJob) {
+      return res.status(409).json({
+        error: 'Training already running',
+        activeJob: {
+          id: activeJob.id,
+          module: activeJob.module,
+          status: activeJob.status
+        }
+      });
+    }
+
+    if (!fs.existsSync(TRAINING_RUNNER)) {
+      return res.status(500).json({ error: 'Training runner not found', path: TRAINING_RUNNER });
+    }
+
+    const pythonPath = resolvePythonPath();
+    const payload = Buffer.from(JSON.stringify(config || {}), 'utf8').toString('base64');
+    const args = ['-u', TRAINING_RUNNER, '--module', moduleKey];
+    if (payload) {
+      args.push('--config-b64', payload);
+    }
+
+    const child = spawn(pythonPath, args, {
+      cwd: process.cwd(),
+      env: { ...process.env, PYTHONUNBUFFERED: '1' }
+    });
+
+    const jobId = crypto.randomUUID();
+    const job = {
+      id: jobId,
+      module: moduleKey,
+      status: 'running',
+      startedAt: new Date().toISOString(),
+      finishedAt: null,
+      exitCode: null,
+      logs: [],
+      buffer: '',
+      pid: child.pid,
+      process: child
+    };
+
+    trainingJobs.set(jobId, job);
+
+    child.stdout.on('data', data => appendTrainingLog(job, data));
+    child.stderr.on('data', data => appendTrainingLog(job, data));
+    child.on('error', err => {
+      appendTrainingLog(job, `Failed to start training: ${err.message}`);
+      flushTrainingLog(job);
+      job.status = 'failed';
+      job.exitCode = -1;
+      job.finishedAt = new Date().toISOString();
+    });
+    child.on('close', (code) => {
+      flushTrainingLog(job);
+      job.exitCode = code;
+      job.finishedAt = new Date().toISOString();
+      if (job.status === 'stopping') {
+        job.status = 'stopped';
+      } else {
+        job.status = code === 0 ? 'completed' : 'failed';
+      }
+    });
+
+    res.json({ id: jobId, status: job.status, module: job.module });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to start training' });
+  }
+});
+
+app.post('/api/training/stop/:id', (req, res) => {
+  const job = trainingJobs.get(req.params.id);
+  if (!job) {
+    return res.status(404).json({ error: 'Training job not found' });
+  }
+  if (job.status !== 'running') {
+    return res.status(409).json({ error: 'Training job is not running' });
+  }
+
+  job.status = 'stopping';
+  if (job.process && !job.process.killed) {
+    job.process.kill();
+    if (process.platform === 'win32') {
+      spawn('taskkill', ['/pid', String(job.process.pid), '/t', '/f']);
+    }
+  }
+
+  res.json({ ok: true });
 });
 
 // ============================================================================
