@@ -61,6 +61,8 @@ build/
 # Project specific
 ai_training/data/
 ai_training/models/
+ai_training/**/data/
+ai_training/**/models/
 .cache/
 
 # Temporary
