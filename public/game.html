@@ -227,6 +227,7 @@
       border-radius: 10px;
       padding: 15px;
       pointer-events: auto;
+      -webkit-backdrop-filter: blur(10px);
       backdrop-filter: blur(10px);
       min-width: 200px;
       box-shadow: 0 16px 40px rgba(0,0,0,0.35);
@@ -753,6 +754,14 @@
       margin-top: 6px;
     }
 
+    #object-type {
+      padding: 8px;
+      background: rgba(30, 41, 59, 0.8);
+      border: 1px solid rgba(71, 85, 105, 0.5);
+      border-radius: 6px;
+      color: #e0e0e0;
+    }
+
     .info-panel-offline-section {
       margin-top: 15px;
     }
@@ -767,6 +776,14 @@
       background: rgba(71, 85, 105, 0.5);
       padding: 2px 4px;
       border-radius: 3px;
+    }
+
+    #object-type-control {
+      padding: 8px;
+      background: rgba(30, 41, 59, 0.8);
+      border: 1px solid rgba(71, 85, 105, 0.5);
+      border-radius: 6px;
+      color: #e0e0e0;
     }
   </style>
 </head>
@@ -784,8 +801,8 @@
       <div class="panel-body">
       
       <div class="input-group">
-        <label>AI Model</label>
-        <select id="model-select">
+        <label for="model-select">AI Model</label>
+        <select id="model-select" aria-labelledby="model-select">
           <option value="gpt-oss-20">gpt-oss-20 (local)</option>
           <option value="llama3.2">llama3.2 (local)</option>
           <option value="qwen2.5">qwen2.5 (local)</option>
