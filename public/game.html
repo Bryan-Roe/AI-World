@@ -4,13 +4,29 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>AI World Generator - 3D Interactive Game</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600&display=swap" rel="stylesheet">
   <script type="module" src="webllm-bridge.js"></script>
   <style>
+    :root {
+      --bg: #050910;
+      --panel: rgba(11, 18, 30, 0.92);
+      --panel-2: rgba(13, 21, 35, 0.9);
+      --border: rgba(148, 163, 184, 0.14);
+      --accent: #22d3ee;
+      --accent-2: #f59e0b;
+      --text: #e5e7eb;
+      --muted: #9fb0c8;
+      --glow: rgba(34, 211, 238, 0.2);
+    }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { 
-      font-family: 'Segoe UI', system-ui, sans-serif; 
-      background: #0a0a0f; 
-      color: #e0e0e0;
+      font-family: 'Manrope', 'Segoe UI', system-ui, sans-serif; 
+      background: radial-gradient(120% 120% at 10% 10%, rgba(34,211,238,0.08), transparent 40%),
+                  radial-gradient(120% 120% at 90% 0%, rgba(245,158,11,0.08), transparent 42%),
+                  var(--bg);
+      color: var(--text);
       overflow: hidden;
     }
     
@@ -36,14 +52,15 @@
       position: absolute;
       top: 20px;
       left: 20px;
-      background: rgba(15, 23, 42, 0.95);
-      border: 1px solid rgba(59, 130, 246, 0.3);
-      border-radius: 12px;
+      background: linear-gradient(145deg, var(--panel), var(--panel-2));
+      border: 1px solid var(--border);
+      border-radius: 14px;
       padding: 20px;
-      width: 320px;
+      width: 340px;
       pointer-events: auto;
-      -webkit-backdrop-filter: blur(10px);
-      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(12px);
+      box-shadow: 0 25px 70px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.02);
       transition: transform 0.25s ease, width 0.2s ease, padding 0.2s ease;
     }
 
@@ -63,11 +80,12 @@
 
     #controls-panel h2 {
       font-size: 18px;
-      color: #60a5fa;
+      color: var(--text);
       display: flex;
       align-items: center;
       gap: 8px;
       margin: 0;
+      letter-spacing: -0.01em;
     }
     
     #controls-panel h2::before {
@@ -81,15 +99,16 @@
     }
 
     #panel-toggle {
-      background: rgba(59, 130, 246, 0.15);
-      border: 1px solid rgba(59, 130, 246, 0.45);
-      color: #bfdbfe;
+      background: rgba(34, 211, 238, 0.1);
+      border: 1px solid rgba(34, 211, 238, 0.35);
+      color: #c7f9ff;
       border-radius: 8px;
       padding: 6px 10px;
       cursor: pointer;
-      font-weight: 600;
+      font-weight: 700;
       font-size: 12px;
-      transition: background 0.2s, border-color 0.2s, color 0.2s;
+      letter-spacing: 0.02em;
+      transition: background 0.2s, border-color 0.2s, color 0.2s, transform 0.15s;
     }
 
     #controls-panel.minimized h2 {
@@ -113,9 +132,10 @@
     }
 
     #panel-toggle:hover {
-      background: rgba(59, 130, 246, 0.25);
-      border-color: rgba(59, 130, 246, 0.65);
-      color: #e5edff;
+      background: rgba(34, 211, 238, 0.2);
+      border-color: rgba(34, 211, 238, 0.55);
+      color: #e5e7eb;
+      transform: translateY(-1px);
     }
 
     #controls-panel .panel-body {
@@ -133,7 +153,7 @@
     .input-group label {
       display: block;
       font-size: 12px;
-      color: #9ca3af;
+      color: var(--muted);
       margin-bottom: 6px;
       text-transform: uppercase;
       letter-spacing: 0.5px;
@@ -142,37 +162,39 @@
     #prompt-input {
       width: 100%;
       padding: 12px;
-      background: rgba(30, 41, 59, 0.8);
-      border: 1px solid rgba(71, 85, 105, 0.5);
-      border-radius: 8px;
-      color: #e0e0e0;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
       font-size: 14px;
       resize: vertical;
       min-height: 80px;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02);
     }
     
     #prompt-input:focus {
       outline: none;
-      border-color: #3b82f6;
-      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--glow);
     }
     
     #generate-btn {
       width: 100%;
       padding: 12px 20px;
-      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      background: linear-gradient(135deg, #0ea5e9, #22d3ee);
       border: none;
-      border-radius: 8px;
-      color: white;
+      border-radius: 10px;
+      color: #041016;
       font-size: 14px;
-      font-weight: 600;
+      font-weight: 700;
       cursor: pointer;
       transition: all 0.3s;
+      box-shadow: 0 12px 35px rgba(14,165,233,0.25);
     }
     
     #generate-btn:hover {
       transform: translateY(-2px);
-      box-shadow: 0 4px 20px rgba(59, 130, 246, 0.4);
+      box-shadow: 0 12px 32px rgba(34,211,238,0.35);
     }
     
     #generate-btn:disabled {
@@ -184,10 +206,11 @@
     #status {
       margin-top: 12px;
       padding: 10px;
-      background: rgba(30, 41, 59, 0.6);
-      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border);
+      border-radius: 10px;
       font-size: 12px;
-      color: #9ca3af;
+      color: var(--muted);
       min-height: 40px;
     }
     
@@ -199,13 +222,14 @@
       position: absolute;
       bottom: 20px;
       left: 20px;
-      background: rgba(15, 23, 42, 0.9);
-      border: 1px solid rgba(59, 130, 246, 0.3);
+      background: var(--panel);
+      border: 1px solid var(--border);
       border-radius: 10px;
       padding: 15px;
       pointer-events: auto;
       backdrop-filter: blur(10px);
       min-width: 200px;
+      box-shadow: 0 16px 40px rgba(0,0,0,0.35);
     }
 
     #close-info-btn {
@@ -254,11 +278,12 @@
       right: 20px;
       width: 150px;
       height: 150px;
-      background: rgba(15, 23, 42, 0.9);
-      border: 1px solid rgba(59, 130, 246, 0.3);
+      background: var(--panel);
+      border: 1px solid var(--border);
       border-radius: 10px;
       pointer-events: auto;
       overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
     }
     
     #minimap canvas {
@@ -302,8 +327,8 @@
       bottom: 20px;
       right: 20px;
       min-width: 200px;
-      background: rgba(10, 12, 18, 0.75);
-      border: 1px solid rgba(96, 165, 250, 0.35);
+      background: var(--panel-2);
+      border: 1px solid var(--border);
       border-radius: 10px;
       padding: 12px;
       pointer-events: none;
@@ -317,7 +342,7 @@
       bottom: 20px;
       left: 350px;
       min-width: 200px;
-      background: rgba(15, 23, 42, 0.88);
+      background: var(--panel);
       border: 1px solid rgba(74, 222, 128, 0.35);
       border-radius: 10px;
       padding: 12px;
@@ -362,9 +387,9 @@
       gap: 4px;
       pointer-events: none;
       padding: 8px;
-      background: rgba(10, 12, 18, 0.85);
-      border: 1px solid rgba(96, 165, 250, 0.4);
-      border-radius: 8px;
+      background: rgba(9, 12, 20, 0.9);
+      border: 1px solid var(--border);
+      border-radius: 10px;
       box-shadow: 0 8px 24px rgba(0,0,0,0.4);
     }
 
@@ -408,10 +433,10 @@
     
     .preset-btn {
       background: rgba(71, 85, 105, 0.5);
-      border: 1px solid rgba(71, 85, 105, 0.5);
-      color: #e0e0e0;
+      border: 1px solid var(--border);
+      color: var(--text);
       padding: 6px 12px;
-      border-radius: 6px;
+      border-radius: 8px;
       font-size: 12px;
       cursor: pointer;
       margin-right: 6px;
@@ -420,8 +445,9 @@
     }
     
     .preset-btn:hover {
-      background: rgba(59, 130, 246, 0.3);
-      border-color: #3b82f6;
+      background: rgba(34, 211, 238, 0.2);
+      border-color: var(--accent);
+      transform: translateY(-1px);
     }
     
     #presets {
@@ -433,11 +459,12 @@
     #model-select {
       width: 100%;
       padding: 10px;
-      background: rgba(30, 41, 59, 0.8);
-      border: 1px solid rgba(71, 85, 105, 0.5);
-      border-radius: 8px;
-      color: #e0e0e0;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
       font-size: 13px;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02);
     }
 
     .loading-spinner {

@@ -48,6 +48,12 @@ const OLLAMA_URL = process.env.OLLAMA_URL || CFG?.ollama?.url || 'http://localho
 const DEFAULT_LOCAL_MODEL = (CFG?.ollama?.default_model || 'gpt-oss-20');
 const CLOUD_DEFAULT_MODEL = (CFG?.openai?.model || 'gpt-4o-mini');
 const CLOUD_MODELS = new Set(CFG?.openai?.cloud_models || ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1', 'gpt-4.1-mini']);
+const isCloudModelName = (name) => {
+  const m = (name || '').trim();
+  if (!m) return false;
+  if (CLOUD_MODELS.has(m)) return true;
+  return m.startsWith('gpt-') && !m.includes('gpt-oss');
+};
 const SSE_HEARTBEAT_MS = Number(CFG?.sse?.heartbeat_interval_ms || 25000);
 const SSE_RETRY_MS = Number(CFG?.sse?.retry_ms || 3000);
 const MORGAN_FORMAT = CFG?.logging?.morgan_format || 'dev';
@@ -312,7 +318,7 @@ app.post('/api/chat', async (req, res) => {
       : dialog.slice(Math.max(0, dialog.length - MAX_HISTORY));
 
     const chosenModel = (model || DEFAULT_LOCAL_MODEL).trim();
-    const isCloudModel = !chosenModel.includes('gpt-oss') && chosenModel.startsWith('gpt-') || CLOUD_MODELS.has(chosenModel);
+    const isCloudModel = isCloudModelName(chosenModel);
 
     const trimDetails = (value, maxLen = 2000) => {
       const s = typeof value === 'string' ? value : JSON.stringify(value);
@@ -454,7 +460,7 @@ app.post('/api/chat-stream', async (req, res) => {
       : dialog.slice(Math.max(0, dialog.length - MAX_HISTORY));
 
     const chosenModel = (model || DEFAULT_LOCAL_MODEL).trim();
-    const isCloudModel = !chosenModel.includes('gpt-oss') && chosenModel.startsWith('gpt-') || CLOUD_MODELS.has(chosenModel);
+    const isCloudModel = isCloudModelName(chosenModel);
 
     // Prepare streaming response headers
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
@@ -586,7 +592,7 @@ app.get('/api/chat-sse', async (req, res) => {
     }
 
     const chosenModel = (model || DEFAULT_LOCAL_MODEL).trim();
-    const isCloudModel = !chosenModel.includes('gpt-oss') && chosenModel.startsWith('gpt-') || CLOUD_MODELS.has(chosenModel);
+    const isCloudModel = isCloudModelName(chosenModel);
 
     // SSE headers
     res.setHeader('Content-Type', 'text/event-stream');
@@ -769,9 +775,21 @@ app.post('/api/multi-chat', async (req, res) => {
     };
 
     const tasks = modelList.map(model => {
-      const preferOllama = true; // default to local when possible
-      if (preferOllama) return queryOllama(model);
-      if (OPENAI_API_KEY) return queryOpenAI(model);
+      const cloudPreferred = isCloudModelName(model);
+      if (cloudPreferred) {
+        if (!OPENAI_API_KEY) {
+          return Promise.resolve({
+            model,
+            provider: 'openai',
+            ok: false,
+            status: 400,
+            ms: 0,
+            text: 'OpenAI API key not configured',
+            raw: { error: 'OpenAI API key not configured' }
+          });
+        }
+        return queryOpenAI(model);
+      }
       return queryOllama(model);
     });
 
@@ -1141,7 +1159,7 @@ except Exception as e:
 if (process.env.NODE_ENV !== 'test') {
   app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
-    console.log('API docs: http://localhost:${PORT} (open in browser)');
+    console.log(`API docs: http://localhost:${PORT} (open in browser)`);
     console.log('API reference: See API.md in project root');
   });
 }

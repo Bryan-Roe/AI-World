@@ -69,11 +69,45 @@ describe('server routes', () => {
     assert.match(res.body.error, /messages array required/i);
   });
 
+  test('multi-chat cloud model reports missing OpenAI key without network call', async () => {
+    const res = await request(app)
+      .post('/api/multi-chat')
+      .send({
+        models: ['gpt-4o'],
+        messages: [{ role: 'user', content: 'hello' }]
+      })
+      .expect(200);
+
+    assert.ok(Array.isArray(res.body.results), 'results array should exist');
+    const first = res.body.results[0];
+    assert.equal(first.model, 'gpt-4o');
+    assert.equal(first.provider, 'openai');
+    assert.equal(first.ok, false);
+    assert.match(first.text, /api key not configured/i);
+    assert.equal(res.body.best, '');
+  });
+
   test('chat-sse requires payload parameter', async () => {
     const res = await request(app)
       .get('/api/chat-sse')
       .expect(400);
     assert.match(res.body.error, /payload/i);
+  });
+
+  test('chat-sse rejects invalid payload encoding', async () => {
+    const res = await request(app)
+      .get('/api/chat-sse')
+      .query({ payload: '!!!not-base64!!!' })
+      .expect(400);
+    assert.match(res.body.error, /invalid payload encoding/i);
+  });
+
+  test('chat-stream requires messages array', async () => {
+    const res = await request(app)
+      .post('/api/chat-stream')
+      .send({ model: 'gpt-oss-20' })
+      .expect(400);
+    assert.match(res.body.error, /messages array required/i);
   });
 
   test('collab endpoint validates required fields', async () => {
