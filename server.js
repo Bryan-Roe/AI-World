@@ -7,6 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
 import { parse as parseToml } from 'toml';
+import rateLimit from 'express-rate-limit';
 import {
   registerUser,
   loginUser,
@@ -18,6 +19,13 @@ import {
 } from './auth.js';
 
 dotenv.config();
+
+const trainingControlLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute window
+  max: 10, // limit each IP to 10 training control requests per window
+  standardHeaders: true,
+  legacyHeaders: false
+});
 
 // Load optional TOML configuration and merge with environment
 const DEFAULT_CONFIG_PATH = process.env.CONFIG_TOML || path.join(
@@ -1119,7 +1127,7 @@ app.get('/api/training/logs/:id', (req, res) => {
   });
 });
 
-app.post('/api/training/start', (req, res) => {
+app.post('/api/training/start', trainingControlLimiter, (req, res) => {
   try {
     const { module, config } = req.body || {};
     const moduleKey = typeof module === 'string' ? module.trim() : '';
@@ -1198,7 +1206,7 @@ app.post('/api/training/start', (req, res) => {
   }
 });
 
-app.post('/api/training/stop/:id', (req, res) => {
+app.post('/api/training/stop/:id', trainingControlLimiter, (req, res) => {
   const job = trainingJobs.get(req.params.id);
   if (!job) {
     return res.status(404).json({ error: 'Training job not found' });
