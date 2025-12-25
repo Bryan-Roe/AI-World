@@ -1,6 +1,8 @@
 // AI World Generator - 3D Interactive Game
 // Uses Three.js for rendering and AI to generate environments
 
+import { WorldRenderer } from './WorldRenderer.js';
+
 class WorldGenerator {
   constructor() {
     this.scene = null;
@@ -9,6 +11,9 @@ class WorldGenerator {
     this.controls = null;
     this.objects = [];
     this.interactableObjects = [];
+    this.worldRenderer = null;
+    this.generatedWorld = null;
+    this.isGeneratedWorldMode = false;
     
     // Interactive object categories for companion
     this.interactiveObjectTypes = {
@@ -212,6 +217,111 @@ class WorldGenerator {
       this.renderer.setSize(window.innerWidth, window.innerHeight);
       this.resizePostFX();
     });
+
+    // Initialize WorldRenderer for generated worlds
+    this.worldRenderer = new WorldRenderer(this.scene, this.camera, this.renderer);
+    console.log('✓ WorldRenderer initialized');
+
+    // Check for generated world to load
+    this.checkForGeneratedWorld();
+  }
+
+  /**
+   * Check if a generated world should be loaded and render it
+   */
+  async checkForGeneratedWorld() {
+    try {
+      // Check URL parameter
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('loadGenerated') === 'true') {
+        // Try to load from localStorage
+        const savedWorld = localStorage.getItem('generatedWorld');
+        if (savedWorld) {
+          const worldData = JSON.parse(savedWorld);
+          this.loadGeneratedWorld(worldData);
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to load generated world:', err);
+    }
+  }
+
+  /**
+   * Load and render an AI-generated world
+   */
+  async loadGeneratedWorld(worldData) {
+    if (!this.worldRenderer || !worldData) {
+      console.error('Cannot load generated world: renderer or data missing');
+      return;
+    }
+
+    try {
+      console.log('🎨 Loading AI-generated world...');
+      this.isGeneratedWorldMode = true;
+      this.generatedWorld = worldData;
+
+      // Clear existing default world
+      this.clearSceneObjects();
+
+      // Render the world using WorldRenderer
+      const result = await this.worldRenderer.renderWorld(worldData);
+      
+      console.log('✅ Generated world loaded successfully', result);
+      
+      // Update camera position to view the world
+      this.camera.position.set(0, 50, 50);
+      this.camera.lookAt(0, 0, 0);
+
+      // Update status
+      this.setStatus(`🌍 Generated world loaded: ${worldData.name || 'Unnamed World'}`, 'success');
+
+      return result;
+    } catch (err) {
+      console.error('Failed to load generated world:', err);
+      this.setStatus(`Error loading world: ${err.message}`, 'error');
+      this.isGeneratedWorldMode = false;
+      throw err;
+    }
+  }
+
+  /**
+   * Clear all scene objects (for loading new worlds)
+   */
+  clearSceneObjects() {
+    // Remove all objects from scene
+    const objectsToRemove = [...this.objects];
+    for (const obj of objectsToRemove) {
+      if (obj.geometry) obj.geometry.dispose();
+      if (obj.material) {
+        if (Array.isArray(obj.material)) {
+          obj.material.forEach(m => m.dispose());
+        } else {
+          obj.material.dispose();
+        }
+      }
+      this.scene.remove(obj);
+    }
+    this.objects = [];
+    
+    // Remove chunk objects if in infinite mode
+    if (this.chunks) {
+      for (const chunk of this.chunks.values()) {
+        if (chunk.group) {
+          this.scene.remove(chunk.group);
+          chunk.group.traverse(obj => {
+            if (obj.geometry) obj.geometry.dispose();
+            if (obj.material) {
+              if (Array.isArray(obj.material)) {
+                obj.material.forEach(m => m.dispose());
+              } else {
+                obj.material.dispose();
+              }
+            }
+          });
+        }
+      }
+      this.chunks.clear();
+    }
   }
 
   setStatus(text, className = '') {

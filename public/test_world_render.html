@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>World Rendering Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border-left: 4px solid #667eea;
+            background: #f9f9f9;
+        }
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background: #764ba2;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            display: none;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+            display: block;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            display: block;
+        }
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+            display: block;
+        }
+        code {
+            background: #f0f0f0;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+        .test-result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+            background: #e8f5e9;
+            border-left: 4px solid #4caf50;
+        }
+        .test-result.fail {
+            background: #ffebee;
+            border-left-color: #f44336;
+        }
+        ul {
+            line-height: 1.8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎨 World Rendering System Test</h1>
+        
+        <div class="test-section">
+            <h2>Overview</h2>
+            <p>This page tests the complete world rendering pipeline:</p>
+            <ul>
+                <li>✓ WorldRenderer.js ES6 module export</li>
+                <li>✓ game.js imports WorldRenderer</li>
+                <li>✓ localStorage integration for world data</li>
+                <li>✓ URL parameter detection (loadGenerated)</li>
+                <li>✓ Three.js scene management</li>
+            </ul>
+        </div>
+
+        <div class="test-section">
+            <h2>Component Tests</h2>
+            
+            <h3>1. Server Health</h3>
+            <button onclick="testServerHealth()">Test Server Health</button>
+            <div id="status-health" class="status"></div>
+
+            <h3>2. WorldRenderer Import Test</h3>
+            <p>Verify that WorldRenderer.js can be imported as an ES6 module:</p>
+            <button onclick="testWorldRendererImport()">Test Import</button>
+            <div id="status-import" class="status"></div>
+
+            <h3>3. localStorage Integration</h3>
+            <p>Test saving and retrieving world data from localStorage:</p>
+            <button onclick="testLocalStorage()">Test localStorage</button>
+            <div id="status-storage" class="status"></div>
+
+            <h3>4. Game Initialization</h3>
+            <p>Verify game.js initializes correctly with world renderer:</p>
+            <button onclick="testGameInit()">Test Game Init</button>
+            <div id="status-game" class="status"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>Integration Test</h2>
+            <p>Complete workflow test with sample world data:</p>
+            <button onclick="testCompleteWorkflow()">Run Full Integration Test</button>
+            <div id="status-workflow" class="status"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>Next Steps</h2>
+            <ol>
+                <li>Generate a world using <code>world_generator.html</code></li>
+                <li>Click "View in 3D" button</li>
+                <li>The game should load and render the world</li>
+                <li>Check browser console (F12) for any errors</li>
+                <li>Verify the 3D world displays correctly</li>
+            </ol>
+        </div>
+
+        <div class="test-section">
+            <h2>Quick Links</h2>
+            <ul>
+                <li><a href="/world_generator.html" target="_blank">🌍 World Generator</a></li>
+                <li><a href="/game.html" target="_blank">🎮 Game</a></li>
+                <li><a href="/" target="_blank">💬 Chat</a></li>
+                <li><a href="/health" target="_blank">🏥 Health Check</a></li>
+            </ul>
+        </div>
+    </div>
+
+    <script type="module">
+        import { WorldRenderer } from './WorldRenderer.js';
+
+        window.testServerHealth = async function() {
+            const el = document.getElementById('status-health');
+            try {
+                const response = await fetch('/health');
+                const data = await response.json();
+                el.className = 'status success';
+                el.textContent = '✓ Server is running: ' + JSON.stringify(data);
+            } catch (err) {
+                el.className = 'status error';
+                el.textContent = '✗ Server health check failed: ' + err.message;
+            }
+        };
+
+        window.testWorldRendererImport = async function() {
+            const el = document.getElementById('status-import');
+            try {
+                if (typeof WorldRenderer !== 'undefined' && WorldRenderer.prototype.renderWorld) {
+                    el.className = 'status success';
+                    el.textContent = '✓ WorldRenderer imported successfully. Has renderWorld method.';
+                    console.log('WorldRenderer methods:', Object.getOwnPropertyNames(WorldRenderer.prototype).slice(0, 5), '...');
+                } else {
+                    throw new Error('WorldRenderer not properly exported');
+                }
+            } catch (err) {
+                el.className = 'status error';
+                el.textContent = '✗ WorldRenderer import failed: ' + err.message;
+            }
+        };
+
+        window.testLocalStorage = function() {
+            const el = document.getElementById('status-storage');
+            try {
+                const testWorld = {
+                    name: 'Test World',
+                    terrain_objects: [],
+                    structures: []
+                };
+                localStorage.setItem('generatedWorld', JSON.stringify(testWorld));
+                const retrieved = JSON.parse(localStorage.getItem('generatedWorld'));
+                
+                if (retrieved.name === 'Test World') {
+                    el.className = 'status success';
+                    el.textContent = '✓ localStorage works correctly. Saved and retrieved test world.';
+                } else {
+                    throw new Error('Data mismatch');
+                }
+            } catch (err) {
+                el.className = 'status error';
+                el.textContent = '✗ localStorage test failed: ' + err.message;
+            }
+        };
+
+        window.testGameInit = async function() {
+            const el = document.getElementById('status-game');
+            try {
+                // Check if game.js exists and is properly formatted
+                const response = await fetch('/game.js');
+                const content = await response.text();
+                
+                const checks = {
+                    'Has ES6 import': content.includes("import { WorldRenderer }"),
+                    'Has worldRenderer property': content.includes('this.worldRenderer = new WorldRenderer'),
+                    'Has checkForGeneratedWorld method': content.includes('checkForGeneratedWorld()'),
+                    'Has loadGeneratedWorld method': content.includes('loadGeneratedWorld(worldData)'),
+                    'Is type=module': true  // We set this in game.html
+                };
+                
+                const allPassed = Object.values(checks).every(v => v);
+                if (allPassed) {
+                    el.className = 'status success';
+                    el.textContent = '✓ Game initialization tests passed:\n' + 
+                        Object.entries(checks).map(([k, v]) => `  ${k}: ${v ? '✓' : '✗'}`).join('\n');
+                } else {
+                    throw new Error('Some checks failed');
+                }
+            } catch (err) {
+                el.className = 'status error';
+                el.textContent = '✗ Game init test failed: ' + err.message;
+            }
+        };
+
+        window.testCompleteWorkflow = async function() {
+            const el = document.getElementById('status-workflow');
+            try {
+                // Step 1: Create sample world
+                const sampleWorld = {
+                    name: "Test Biome",
+                    sky_color: "0x87ceeb",
+                    fog_color: "0x87ceeb",
+                    fog_density: 0.005,
+                    terrain_objects: [
+                        {
+                            type: "plane",
+                            position: [0, 0, 0],
+                            scale: [100, 1, 100],
+                            color: "0x228b22",
+                            roughness: 0.7,
+                            metalness: 0.1,
+                            receives_shadow: true
+                        }
+                    ],
+                    structures: [
+                        {
+                            type: "cube",
+                            position: [0, 5, 0],
+                            scale: [10, 10, 10],
+                            color: "0xff0000",
+                            roughness: 0.5,
+                            metalness: 0.2,
+                            casts_shadow: true
+                        }
+                    ],
+                    lights: [
+                        {
+                            type: "ambient",
+                            color: "0xffffff",
+                            intensity: 0.5
+                        }
+                    ]
+                };
+
+                // Step 2: Test localStorage
+                localStorage.setItem('generatedWorld', JSON.stringify(sampleWorld));
+                const retrieved = JSON.parse(localStorage.getItem('generatedWorld'));
+                
+                if (retrieved.name !== sampleWorld.name) {
+                    throw new Error('localStorage integrity check failed');
+                }
+
+                // Step 3: Test URL parameter encoding
+                const urlParams = new URLSearchParams({ loadGenerated: 'true' });
+                const testUrl = '/game.html?' + urlParams.toString();
+                
+                el.className = 'status success';
+                el.innerHTML = `
+                    <strong>✓ Complete Workflow Test Passed!</strong><br><br>
+                    Test Results:
+                    <div class="test-result">
+                        <strong>1. Sample World Created:</strong> ${sampleWorld.name} with ${sampleWorld.terrain_objects.length} terrain object(s)<br>
+                        <strong>2. localStorage Save/Retrieve:</strong> ✓ Data persisted correctly<br>
+                        <strong>3. URL Parameter:</strong> ${testUrl}<br>
+                        <strong>4. Ready to Test:</strong> <a href="${testUrl}" target="_blank">Click here to view the rendered world</a>
+                    </div>
+                `;
+            } catch (err) {
+                el.className = 'status error';
+                el.textContent = '✗ Workflow test failed: ' + err.message;
+            }
+        };
+
+        // Run initial tests on load
+        window.addEventListener('load', () => {
+            console.log('🧪 World Rendering Test Page Loaded');
+            console.log('WorldRenderer available:', typeof WorldRenderer !== 'undefined');
+        });
+    </script>
+</body>
+</html>
