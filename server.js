@@ -20,6 +20,14 @@ import {
 
 dotenv.config();
 
+// Rate limiter for authenticated/auth-related endpoints
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false   // Disable the `X-RateLimit-*` headers
+});
+
 const trainingControlLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute window
   max: 10, // limit each IP to 10 training control requests per window
@@ -312,7 +320,7 @@ app.get('/auth/profile', verifyToken, (req, res) => {
 });
 
 // Update user preferences (protected)
-app.put('/auth/preferences', verifyToken, (req, res) => {
+app.put('/auth/preferences', authLimiter, verifyToken, (req, res) => {
   try {
     const { preferences } = req.body;
 
