@@ -34,7 +34,7 @@ docker exec ollama-local ollama pull qwen2.5
 - Inputs validated: `/api/chat{,-stream}` expect `messages: [{role,content}], model`
 - History trimmed: system + last 12 messages (mirrored in `public/app.js`)
 - Model routing: local default `gpt-oss-20`; `gpt-4o(-mini)` -> OpenAI
-- Routing rules: `gpt-oss-*` → Ollama; `gpt-*` (non-`gpt-oss-*`) or in `CLOUD_MODELS` → OpenAI. Configure `DEFAULT_LOCAL_MODEL`/`CLOUD_MODELS` in [server.js](server.js).
+- Routing rules: `gpt-oss-*` → Ollama; `gpt-*` (non-`gpt-oss-*`) or in `CLOUD_MODELS` → OpenAI. Configure `DEFAULT_LOCAL_MODEL`/`CLOUD_MODELS` in [server.js](../server.js).
 - Streaming: `/api/chat-stream` (Fetch) and `/api/chat-sse` (SSE)
 - Consistent shape: response `{text, raw}`; 429 limit: 30 req/min/IP
 

@@ -730,7 +730,6 @@
     }
 
     function collectConfig() {
-      const mod = modules[selectedModule];
       const config = {};
       const inputs = configFields.querySelectorAll("[data-key]");
       inputs.forEach(input => {
@@ -745,7 +744,12 @@
           value = input.value.trim();
         }
         if (key === "hidden_layers") {
-          value = value.split(",").map(part => part.trim()).filter(Boolean).map(Number);
+          value = value
+            .split(",")
+            .map(part => part.trim())
+            .filter(Boolean)
+            .map(Number)
+            .filter(Number.isFinite);
         }
         if (key === "preset" && value === "default") {
           return;
@@ -916,7 +920,6 @@
       }
     }
 
-    moduleGrid.addEventListener("click", () => {});
     startBtn.addEventListener("click", startTraining);
     stopBtn.addEventListener("click", stopTraining);
     clearLogsBtn.addEventListener("click", clearLogs);
