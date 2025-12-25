@@ -20,10 +20,10 @@ import {
 
 dotenv.config();
 
-// Rate limiter for authenticated/auth-related endpoints
-const authLimiter = rateLimit({
+// Rate limiter for authentication-related routes
+const authRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  max: 100, // limit each IP to 100 auth requests per windowMs
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: false   // Disable the `X-RateLimit-*` headers
 });
@@ -305,7 +305,7 @@ app.post('/auth/refresh', (req, res) => {
 });
 
 // Get user profile (protected)
-app.get('/auth/profile', verifyToken, (req, res) => {
+app.get('/auth/profile', authRateLimiter, verifyToken, (req, res) => {
   try {
     const profile = getUserProfile(req.user.username);
     
