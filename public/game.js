@@ -92,6 +92,25 @@ class WorldGenerator {
     };
     this.autoSaveInterval = null;
     this.enhanced = null; // Will be initialized after scene is created
+    this.sunLight = null;
+    this.ambientLight = null;
+    this.hemiLight = null;
+    this.skyDome = null;
+    this.skyUniforms = null;
+    this.pmremGenerator = null;
+    this.envMapTarget = null;
+    this.envCanvas = null;
+    this.envContext = null;
+    this.envTexture = null;
+    this.envUpdateInterval = 2000;
+    this.lastEnvUpdate = 0;
+    this._skyTopColor = new THREE.Color(0x8fb8ff);
+    this._skyBottomColor = new THREE.Color(0xefe9dc);
+    this._skyBaseColor = new THREE.Color(0x87ceeb);
+    this._whiteColor = new THREE.Color(0xffffff);
+    this._blackColor = new THREE.Color(0x000000);
+    this._sunColor = new THREE.Color(0xffffff);
+    this._ambientColor = new THREE.Color(0xb5d4ff);
     
     this.init();
     this.setupEventListeners();
@@ -125,6 +144,7 @@ class WorldGenerator {
       console.error('Failed to initialize renderer - world will not display');
       return;
     }
+    this.setupGraphicsPipeline();
 
     // Initialize enhanced world system (dynamic lighting, particles, biomes)
     import('./vendor/EnhancedWorld.js').then(module => {
@@ -228,9 +248,10 @@ class WorldGenerator {
     try {
       this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
       this.renderer.setSize(window.innerWidth, window.innerHeight);
-      this.renderer.setPixelRatio(window.devicePixelRatio);
+      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       this.renderer.shadowMap.enabled = true;
       this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      this.configureRenderer();
       container.appendChild(this.renderer.domElement);
       
       console.log('✓ Renderer created successfully');
@@ -258,9 +279,137 @@ class WorldGenerator {
     }
   }
 
+  configureRenderer() {
+    if (!this.renderer) return;
+    if (THREE.ColorManagement && 'enabled' in THREE.ColorManagement) {
+      THREE.ColorManagement.enabled = true;
+    }
+    if ('outputColorSpace' in this.renderer && THREE.SRGBColorSpace) {
+      this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    } else if ('outputEncoding' in this.renderer && THREE.sRGBEncoding) {
+      this.renderer.outputEncoding = THREE.sRGBEncoding;
+    }
+    if ('toneMapping' in this.renderer && THREE.ACESFilmicToneMapping) {
+      this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      this.renderer.toneMappingExposure = 1.05;
+    }
+    if ('physicallyCorrectLights' in this.renderer) {
+      this.renderer.physicallyCorrectLights = true;
+    }
+  }
+
+  setupGraphicsPipeline() {
+    if (!this.renderer || !this.scene) return;
+    if (this.pmremGenerator) {
+      this.pmremGenerator.dispose();
+      this.pmremGenerator = null;
+    }
+    if (this.envMapTarget) {
+      this.envMapTarget.dispose();
+      this.envMapTarget = null;
+    }
+    this.createSkyDome();
+    this.updateEnvironmentMap(this._skyTopColor, this._skyBottomColor, true);
+  }
+
+  createSkyDome() {
+    if (this.skyDome || !this.scene) return;
+    const geometry = new THREE.SphereGeometry(520, 32, 15);
+    this.skyUniforms = {
+      topColor: { value: this._skyTopColor.clone() },
+      bottomColor: { value: this._skyBottomColor.clone() },
+      offset: { value: 33 },
+      exponent: { value: 0.6 }
+    };
+    const material = new THREE.ShaderMaterial({
+      uniforms: this.skyUniforms,
+      vertexShader: `
+        varying vec3 vWorldPosition;
+        void main() {
+          vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+          vWorldPosition = worldPosition.xyz;
+          gl_Position = projectionMatrix * viewMatrix * worldPosition;
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 topColor;
+        uniform vec3 bottomColor;
+        uniform float offset;
+        uniform float exponent;
+        varying vec3 vWorldPosition;
+        void main() {
+          float h = normalize(vWorldPosition + vec3(0.0, offset, 0.0)).y;
+          float mixVal = pow(max(h, 0.0), exponent);
+          gl_FragColor = vec4(mix(bottomColor, topColor, mixVal), 1.0);
+        }
+      `,
+      side: THREE.BackSide,
+      depthWrite: false
+    });
+    this.skyDome = new THREE.Mesh(geometry, material);
+    this.skyDome.renderOrder = -1;
+    this.scene.add(this.skyDome);
+  }
+
+  updateEnvironmentMap(topColor, bottomColor, force = false) {
+    if (!this.renderer || !this.scene) return;
+    const now = performance.now();
+    if (!force && now - this.lastEnvUpdate < this.envUpdateInterval) return;
+    this.lastEnvUpdate = now;
+
+    if (!this.envCanvas) {
+      this.envCanvas = document.createElement('canvas');
+      this.envCanvas.width = 512;
+      this.envCanvas.height = 256;
+      this.envContext = this.envCanvas.getContext('2d');
+      this.envTexture = new THREE.CanvasTexture(this.envCanvas);
+      this.envTexture.mapping = THREE.EquirectangularReflectionMapping;
+      if ('colorSpace' in this.envTexture && THREE.SRGBColorSpace) {
+        this.envTexture.colorSpace = THREE.SRGBColorSpace;
+      } else if ('encoding' in this.envTexture && THREE.sRGBEncoding) {
+        this.envTexture.encoding = THREE.sRGBEncoding;
+      }
+    }
+
+    if (!this.envContext) return;
+    const ctx = this.envContext;
+    const gradient = ctx.createLinearGradient(0, 0, 0, this.envCanvas.height);
+    gradient.addColorStop(0, `#${topColor.getHexString()}`);
+    gradient.addColorStop(1, `#${bottomColor.getHexString()}`);
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, this.envCanvas.width, this.envCanvas.height);
+    this.envTexture.needsUpdate = true;
+
+    if (!this.pmremGenerator) {
+      this.pmremGenerator = new THREE.PMREMGenerator(this.renderer);
+      this.pmremGenerator.compileEquirectangularShader();
+    }
+    if (this.envMapTarget) {
+      this.envMapTarget.dispose();
+    }
+    this.envMapTarget = this.pmremGenerator.fromEquirectangular(this.envTexture);
+    this.scene.environment = this.envMapTarget.texture;
+  }
+
+  syncAtmosphere() {
+    if (!this.scene || !this.skyUniforms) return;
+    if (this.skyDome && this.camera) {
+      this.skyDome.position.copy(this.camera.position);
+    }
+    const baseColor = this.scene.background instanceof THREE.Color
+      ? this.scene.background
+      : this._skyBaseColor;
+    this._skyTopColor.copy(baseColor).lerp(this._whiteColor, 0.35);
+    this._skyBottomColor.copy(baseColor).lerp(this._blackColor, 0.45);
+    this.skyUniforms.topColor.value.copy(this._skyTopColor);
+    this.skyUniforms.bottomColor.value.copy(this._skyBottomColor);
+    this.updateEnvironmentMap(this._skyTopColor, this._skyBottomColor);
+  }
+
   reconnectRenderer() {
     try {
       this.createRenderer();
+      this.setupGraphicsPipeline();
       this.setStatus('Renderer reconnected.', 'success');
     } catch (err) {
       console.error('Reconnect failed:', err);
@@ -684,6 +833,9 @@ class WorldGenerator {
     this.interactableObjects = [];
     this.highlighted = null;
     this.ground = null;
+    this.sunLight = null;
+    this.ambientLight = null;
+    this.hemiLight = null;
   }
 
   generateDefaultWorld() {
@@ -691,9 +843,18 @@ class WorldGenerator {
     
     // Setup global lighting
     const ambient = new THREE.AmbientLight(0xb5d4ff, 0.85);
+    ambient.name = 'ambient';
     this.addLight(ambient);
+    this.ambientLight = ambient;
+
+    const hemi = new THREE.HemisphereLight(0x8fb8ff, 0x2a2416, 0.35);
+    hemi.position.set(0, 120, 0);
+    hemi.name = 'hemi';
+    this.addLight(hemi);
+    this.hemiLight = hemi;
 
     const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+    sun.name = 'sun';
     sun.position.set(80, 120, 60);
     sun.shadow.mapSize.width = 2048;
     sun.shadow.mapSize.height = 2048;
@@ -703,7 +864,11 @@ class WorldGenerator {
     sun.shadow.camera.right = 200;
     sun.shadow.camera.top = 200;
     sun.shadow.camera.bottom = -200;
+    sun.shadow.bias = -0.0006;
+    sun.shadow.normalBias = 0.05;
+    sun.shadow.radius = 3;
     this.addLight(sun, { castShadow: true });
+    this.sunLight = sun;
 
     this.scene.background = new THREE.Color(0x87ceeb);
     this.scene.fog = new THREE.FogExp2(0x87ceeb, 0.004);
@@ -2021,8 +2186,18 @@ Rules:
     this.objects.push(ground);
 
     const ambient = new THREE.AmbientLight(0xb5d4ff, 0.8);
+    ambient.name = 'ambient';
     this.addLight(ambient);
+    this.ambientLight = ambient;
+
+    const hemi = new THREE.HemisphereLight(0x8fb8ff, 0x2a2416, 0.3);
+    hemi.position.set(0, 120, 0);
+    hemi.name = 'hemi';
+    this.addLight(hemi);
+    this.hemiLight = hemi;
+
     const sun = new THREE.DirectionalLight(0xffffff, 1.1);
+    sun.name = 'sun';
     sun.position.set(80, 120, 60);
     sun.shadow.mapSize.width = 2048;
     sun.shadow.mapSize.height = 2048;
@@ -2032,7 +2207,11 @@ Rules:
     sun.shadow.camera.right = 100;
     sun.shadow.camera.top = 100;
     sun.shadow.camera.bottom = -100;
+    sun.shadow.bias = -0.0006;
+    sun.shadow.normalBias = 0.05;
+    sun.shadow.radius = 3;
     this.addLight(sun, { castShadow: true });
+    this.sunLight = sun;
 
     const colorStr = (c) => (typeof c === 'number' ? ('#' + c.toString(16).padStart(6, '0')) : (c || '#ffffff'));
 
@@ -3224,17 +3403,9 @@ Rules:
     if (this.timeOfDay > 1) this.timeOfDay = 0;
     
     // Update sky and lighting based on time
-    const sunIntensity = Math.sin(this.timeOfDay * Math.PI) * 0.8 + 0.4;
-    const ambientIntensity = Math.sin(this.timeOfDay * Math.PI) * 0.5 + 0.4;
-    
-    // Adjust sun light
-    this.lights.forEach(light => {
-      if (light.type === 'DirectionalLight') {
-        light.intensity = sunIntensity;
-      } else if (light.type === 'AmbientLight') {
-        light.intensity = ambientIntensity;
-      }
-    });
+    const sunPhase = Math.sin(this.timeOfDay * Math.PI);
+    const sunIntensity = sunPhase * 0.8 + 0.4;
+    const ambientIntensity = sunPhase * 0.5 + 0.4;
     
     // Adjust sky color based on time
     let skyColor;
@@ -3249,8 +3420,59 @@ Rules:
     } else { // Night
       skyColor = new THREE.Color(0x0a0a1e);
     }
-    
-    this.scene.background.lerp(skyColor, 0.02);
+
+    if (this.timeOfDay < 0.25) {
+      this._sunColor.setHex(0x1a2a4a);
+      this._ambientColor.setHex(0x111827);
+    } else if (this.timeOfDay < 0.35) {
+      this._sunColor.setHex(0xffb67a);
+      this._ambientColor.setHex(0xffd6a5);
+    } else if (this.timeOfDay < 0.65) {
+      this._sunColor.setHex(0xffffff);
+      this._ambientColor.copy(skyColor);
+    } else if (this.timeOfDay < 0.75) {
+      this._sunColor.setHex(0xff8a4c);
+      this._ambientColor.setHex(0xffc7a3);
+    } else {
+      this._sunColor.setHex(0x1a2a4a);
+      this._ambientColor.setHex(0x111827);
+    }
+
+    const sunLight = this.sunLight || this.lights.find(light => light.type === 'DirectionalLight');
+    const ambientLight = this.ambientLight || this.lights.find(light => light.type === 'AmbientLight');
+    const hemiLight = this.hemiLight || this.lights.find(light => light.type === 'HemisphereLight');
+
+    if (sunLight) {
+      sunLight.intensity = sunIntensity;
+      if (sunLight.color) sunLight.color.copy(this._sunColor);
+    }
+    if (ambientLight) {
+      ambientLight.intensity = ambientIntensity;
+      if (ambientLight.color) ambientLight.color.copy(this._ambientColor);
+    }
+    if (hemiLight) {
+      hemiLight.intensity = ambientIntensity * 0.6;
+      if (hemiLight.color) hemiLight.color.copy(this._ambientColor);
+      if (hemiLight.groundColor) {
+        hemiLight.groundColor.copy(this._ambientColor).lerp(this._blackColor, 0.3);
+      }
+    }
+
+    if (this.renderer && 'toneMappingExposure' in this.renderer) {
+      this.renderer.toneMappingExposure = 0.85 + sunPhase * 0.35;
+    }
+
+    if (this.scene.background && this.scene.background.isColor) {
+      this.scene.background.lerp(skyColor, 0.04);
+    } else {
+      this.scene.background = skyColor.clone();
+    }
+    if (this.scene.fog && this.scene.fog.color) {
+      this.scene.fog.color.lerp(skyColor, 0.04);
+      if ('density' in this.scene.fog) {
+        this.scene.fog.density = 0.003 + (1 - sunPhase) * 0.002;
+      }
+    }
   }
 
   updateWeather(delta) {
@@ -3431,6 +3653,9 @@ Rules:
       this.enhanced.update(delta);
     }
 
+    // Sync sky/environment with current lighting
+    this.syncAtmosphere();
+
     // Player HUD
     this.updatePlayerUI();
     
@@ -3475,6 +3700,192 @@ window.addEventListener('load', () => {
     console.error('❌ Failed to initialize game:', err);
     const statusEl = document.getElementById('status');
     if (statusEl) {
+      statusEl.textContent = 'Failed to initialize: ' + err.message;
+      statusEl.style.color = '#ef4444';
+    }
+  }
+});
+
+// ============================================================================
+// LLM CHAT INTEGRATION
+// ============================================================================
+
+class LLMChat {
+  constructor() {
+    this.chatPanel = document.getElementById('llm-chat-panel');
+    this.chatMessages = document.getElementById('chat-messages');
+    this.chatInput = document.getElementById('chat-input');
+    this.sendBtn = document.getElementById('send-chat-btn');
+    this.toggleBtn = document.getElementById('toggle-chat-btn');
+    this.closeBtn = document.getElementById('close-chat-btn');
+    this.modelName = document.getElementById('chat-model-name');
+    
+    this.messages = [];
+    this.maxHistory = 10;
+    this.isProcessing = false;
+    
+    this.init();
+  }
+  
+  init() {
+    // Toggle chat panel
+    this.toggleBtn.addEventListener('click', () => {
+      const isHidden = this.chatPanel.style.display === 'none';
+      this.chatPanel.style.display = isHidden ? 'block' : 'none';
+      this.toggleBtn.style.display = isHidden ? 'none' : 'block';
+      if (isHidden) this.chatInput.focus();
+    });
+    
+    // Close chat
+    this.closeBtn.addEventListener('click', () => {
+      this.chatPanel.style.display = 'none';
+      this.toggleBtn.style.display = 'block';
+    });
+    
+    // Send message
+    this.sendBtn.addEventListener('click', () => this.sendMessage());
+    this.chatInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        this.sendMessage();
+      }
+    });
+    
+    // Keyboard shortcut: C to open chat
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'c' && !e.ctrlKey && !e.altKey && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+        e.preventDefault();
+        if (this.chatPanel.style.display === 'none') {
+          this.chatPanel.style.display = 'block';
+          this.toggleBtn.style.display = 'none';
+          this.chatInput.focus();
+        }
+      }
+    });
+    
+    console.log('✓ LLM Chat initialized (press C to open chat)');
+  }
+  
+  async sendMessage() {
+    const userInput = this.chatInput.value.trim();
+    if (!userInput || this.isProcessing) return;
+    
+    // Add user message
+    this.addMessage('user', userInput);
+    this.chatInput.value = '';
+    this.isProcessing = true;
+    this.sendBtn.textContent = '...';
+    this.sendBtn.disabled = true;
+    
+    try {
+      // Call the server API with conversation history
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [
+            { role: 'system', content: 'You are a friendly AI companion in a 3D game world. Keep responses brief, helpful, and engaging. You help the player explore, learn, and have fun.' },
+            ...this.messages.map(m => ({ role: m.role, content: m.content }))
+          ],
+          model: 'gpt-oss-20' // Use the local model
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      const reply = data.text || 'Sorry, I couldn\'t generate a response.';
+      
+      // Add assistant message
+      this.addMessage('assistant', reply);
+      
+      // Speak the response if companion has voice enabled
+      if (window.game && window.game.companion.voiceEnabled) {
+        this.speak(reply);
+      }
+      
+    } catch (err) {
+      console.error('Chat error:', err);
+      this.addMessage('system', `Error: ${err.message}. Make sure the server is running with 'npm run dev'.`);
+    } finally {
+      this.isProcessing = false;
+      this.sendBtn.textContent = 'Send';
+      this.sendBtn.disabled = false;
+    }
+  }
+  
+  addMessage(role, content) {
+    // Add to history
+    this.messages.push({ role, content });
+    
+    // Trim history
+    if (this.messages.length > this.maxHistory * 2) {
+      this.messages = this.messages.slice(-this.maxHistory * 2);
+    }
+    
+    // Clear placeholder if first message
+    if (this.messages.length === 1) {
+      this.chatMessages.innerHTML = '';
+    }
+    
+    // Create message element
+    const msgDiv = document.createElement('div');
+    msgDiv.style.marginBottom = '12px';
+    msgDiv.style.padding = '10px 12px';
+    msgDiv.style.borderRadius = '8px';
+    
+    if (role === 'user') {
+      msgDiv.style.background = 'rgba(34, 211, 238, 0.15)';
+      msgDiv.style.borderLeft = '3px solid var(--accent)';
+      msgDiv.style.color = 'var(--text)';
+      msgDiv.innerHTML = `<strong style="color: var(--accent);">You:</strong><br>${this.escapeHtml(content)}`;
+    } else if (role === 'assistant') {
+      msgDiv.style.background = 'rgba(139, 92, 246, 0.15)';
+      msgDiv.style.borderLeft = '3px solid #8b5cf6';
+      msgDiv.style.color = 'var(--text)';
+      msgDiv.innerHTML = `<strong style="color: #a78bfa;">AI Companion:</strong><br>${this.escapeHtml(content)}`;
+    } else {
+      msgDiv.style.background = 'rgba(245, 158, 11, 0.15)';
+      msgDiv.style.borderLeft = '3px solid var(--accent-2)';
+      msgDiv.style.color = 'var(--muted)';
+      msgDiv.style.fontSize = '12px';
+      msgDiv.textContent = content;
+    }
+    
+    this.chatMessages.appendChild(msgDiv);
+    this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
+  }
+  
+  speak(text) {
+    if ('speechSynthesis' in window) {
+      // Cancel any ongoing speech
+      window.speechSynthesis.cancel();
+      
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = window.game.companion.voiceRate || 1.02;
+      utterance.pitch = window.game.companion.voicePitch || 1.05;
+      utterance.volume = window.game.companion.voiceVolume || 0.85;
+      
+      window.speechSynthesis.speak(utterance);
+    }
+  }
+  
+  escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML.replace(/\n/g, '<br>');
+  }
+}
+
+// Initialize chat when page loads
+window.addEventListener('load', () => {
+  setTimeout(() => {
+    window.llmChat = new LLMChat();
+    console.log('✓ LLM Chat ready');
+  }, 1000);
+});
       statusEl.textContent = 'Initialization failed: ' + err.message;
       statusEl.className = 'error';
     }
