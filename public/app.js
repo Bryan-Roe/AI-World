@@ -89,9 +89,20 @@ function showEmptyState() {
   if (emptyState) emptyState.style.display = 'flex';
 }
 
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/\//g, '&#x2F;');
+}
+
 function formatContent(content) {
-  // Simple markdown-like formatting for code blocks
-  let formatted = content
+  // Simple markdown-like formatting for code blocks, applied after HTML-escaping
+  const safe = escapeHtml(content);
+  let formatted = safe
     .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
     .replace(/`([^`]+)`/g, '<code>$1</code>')
     .replace(/\n/g, '<br>');
