@@ -568,3 +568,5 @@ export class WorldRenderer {
     this.lights = [];
   }
 }
+
+export { WorldRenderer };
